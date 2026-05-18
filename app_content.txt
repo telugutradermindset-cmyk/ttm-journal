@@ -1,0 +1,1761 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import './App.css';
+
+const App = () => {
+  // ===================== COLOR SCHEME =====================
+  const C = {
+    bg: "#03080c",
+    bgPanel: "#0a0f14",
+    bgInput: "#0d1218",
+    border: "#1a2332",
+    text: "#e4e6eb",
+    textSecondary: "#9ca3af",
+    accent: "#e8a020",
+    accentLight: "#f0b23b",
+    green: "#00c853",
+    red: "#ff1744",
+    yellow: "#ffd600",
+    blue: "#1e88e5",
+    purple: "#9c27b0",
+    hover: "#1a2332",
+  };
+
+  // ===================== DROPDOWNS DATA =====================
+  const PAIRS = [
+    "EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD",
+    "EUR/GBP", "EUR/JPY", "GBP/JPY", "CHF/USD", "NZD/USD",
+    "EUR/CHF", "AUD/JPY", "GBP/AUD", "XAU/USD", "BTC/USD"
+  ];
+
+  const SESSIONS = [
+    "Asian Session", "London Session", "New York Session", "Sydney Session", "Overnight"
+  ];
+
+  const SETUPS = [
+    "Support/Resistance", "Trend Following", "Breakout", "Range Trading",
+    "Pullback", "Scalp", "News Trade", "Other"
+  ];
+
+  const EMOTIONS = [
+    "Confident", "Neutral", "Anxious", "Frustrated",
+    "Greedy", "Fearful", "Impatient", "Focused"
+  ];
+
+  const GRADES = ["A+", "A", "B", "C", "D", "F"];
+  const TIMEFRAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1", "W1"];
+
+  // ===================== STATE MANAGEMENT =====================
+  const [trades, setTrades] = useState([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
+  const [currentPage, setCurrentPage] = useState('dashboard');
+  const [showSaveIndicator, setShowSaveIndicator] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving' | 'error'
+  const saveTimeoutRef = useRef(null);
+  const autoSaveTimeoutRef = useRef(null);
+
+  // Form state for new trade
+  const emptyForm = {
+    date: new Date().toISOString().split('T')[0],
+    pair: PAIRS[0],
+    direction: 'Long',
+    entryTime: '09:00',
+    entryPrice: '',
+    exitTime: '10:00',
+    exitPrice: '',
+    stopLoss: '',
+    takeProfit: '',
+    riskAmount: '',
+    rewardAmount: '',
+    lotSize: '',
+    pipsGained: '',
+    session: SESSIONS[0],
+    setup: SETUPS[0],
+    confluences: [],
+    emotion: EMOTIONS[0],
+    mistake: '',
+    outcome: 'Win',
+    tradeIdea: '',
+    executionNotes: '',
+    lessonLearned: '',
+    grade: GRADES[0],
+    timeframe: TIMEFRAMES[4],
+  };
+
+  const [formData, setFormData] = useState(emptyForm);
+  const [editingId, setEditingId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterPair, setFilterPair] = useState('All Pairs');
+  const [summaryPeriod, setSummaryPeriod] = useState('week'); // 'week' | 'month' | 'all'
+
+  // ===================== MT5 STATE =====================
+  const [mt5Connected, setMt5Connected] = useState(false);
+  const [mt5Account, setMt5Account] = useState(null);
+  const [mt5OpenTrades, setMt5OpenTrades] = useState([]);
+  const [mt5History, setMt5History] = useState([]);
+  const [mt5Summary, setMt5Summary] = useState(null);
+  const [mt5Loading, setMt5Loading] = useState(false);
+  const [mt5Error, setMt5Error] = useState('');
+  const [mt5HistoryDays, setMt5HistoryDays] = useState(30);
+  const [mt5ActiveAccount, setMt5ActiveAccount] = useState(0);
+  const [mt5Switching, setMt5Switching] = useState(false);
+  const [mt5Accounts, setMt5Accounts] = useState([]);
+  const mt5RefreshRef = useRef(null);
+
+  const MT5_URL = 'http://127.0.0.1:5000';
+
+  const fetchMt5Data = useCallback(async () => {
+    try {
+      const statusRes = await fetch(`${MT5_URL}/status`);
+      const status = await statusRes.json();
+      if (!status.connected) {
+        setMt5Connected(false);
+        setMt5Error('MT5 not connected. Make sure mt5_bridge.py is running.');
+        return;
+      }
+      setMt5Connected(true);
+      setMt5Error('');
+      const [accountRes, openRes, summaryRes, accountsRes] = await Promise.all([
+        fetch(`${MT5_URL}/account`),
+        fetch(`${MT5_URL}/open-trades`),
+        fetch(`${MT5_URL}/summary`),
+        fetch(`${MT5_URL}/accounts`),
+      ]);
+      setMt5Account(await accountRes.json());
+      setMt5OpenTrades(await openRes.json());
+      setMt5Summary(await summaryRes.json());
+      const accs = await accountsRes.json();
+      setMt5Accounts(accs);
+      const active = accs.findIndex(a => a.active);
+      if (active >= 0) setMt5ActiveAccount(active);
+    } catch (e) {
+      setMt5Connected(false);
+      setMt5Error('Cannot reach MT5 bridge. Make sure mt5_bridge.py is running.');
+    }
+  }, []);
+
+  const fetchMt5History = useCallback(async (days) => {
+    try {
+      const res = await fetch(`${MT5_URL}/history/${days}`);
+      setMt5History(await res.json());
+    } catch (e) {}
+  }, []);
+
+  const switchMt5Account = useCallback(async (index) => {
+    setMt5Switching(true);
+    try {
+      const res = await fetch(`${MT5_URL}/switch-account/${index}`, { method: 'POST' });
+      const result = await res.json();
+      if (result.success) {
+        setMt5ActiveAccount(index);
+        await fetchMt5Data();
+        await fetchMt5History(mt5HistoryDays);
+      } else {
+        setMt5Error(result.error || 'Failed to switch account');
+      }
+    } catch (e) {
+      setMt5Error('Failed to switch account');
+    }
+    setMt5Switching(false);
+  }, [fetchMt5Data, fetchMt5History, mt5HistoryDays]);
+
+  useEffect(() => {
+    if (currentPage === 'mt5') {
+      setMt5Loading(true);
+      fetchMt5Data().finally(() => setMt5Loading(false));
+      fetchMt5History(mt5HistoryDays);
+      mt5RefreshRef.current = setInterval(fetchMt5Data, 5000);
+    } else {
+      clearInterval(mt5RefreshRef.current);
+    }
+    return () => clearInterval(mt5RefreshRef.current);
+  }, [currentPage, fetchMt5Data, mt5HistoryDays]);
+
+  // ===================== DATA LOADING =====================
+  // Load trades on mount: prefer Electron file system, fallback to localStorage
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        if (window.electron?.loadTrades) {
+          const fileTrades = await window.electron.loadTrades();
+          if (fileTrades && fileTrades.length > 0) {
+            setTrades(fileTrades);
+            setDataLoaded(true);
+            return;
+          }
+        }
+        // Fallback to localStorage
+        const saved = localStorage.getItem('trades');
+        if (saved) {
+          setTrades(JSON.parse(saved));
+        }
+      } catch (err) {
+        console.error('Error loading trades:', err);
+        const saved = localStorage.getItem('trades');
+        if (saved) setTrades(JSON.parse(saved));
+      }
+      setDataLoaded(true);
+    };
+    loadData();
+  }, []);
+
+  // ===================== AUTO-SAVE FUNCTIONALITY =====================
+  const saveTrades = useCallback(async (tradesToSave) => {
+    setSaveStatus('saving');
+
+    // Always save to localStorage as backup
+    localStorage.setItem('trades', JSON.stringify(tradesToSave));
+
+    // Save to Electron file system if available
+    if (window.electron?.saveTrades) {
+      try {
+        const result = await window.electron.saveTrades(tradesToSave);
+        if (result?.success) {
+          setSaveStatus('saved');
+        } else {
+          setSaveStatus('error');
+        }
+      } catch (err) {
+        console.error('Electron save error:', err);
+        setSaveStatus('error');
+      }
+    } else {
+      setSaveStatus('saved');
+    }
+
+    setShowSaveIndicator(true);
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      setShowSaveIndicator(false);
+    }, 2500);
+  }, []);
+
+  // Auto-save on trades change (debounced 2 seconds), skip on initial load
+  useEffect(() => {
+    if (!dataLoaded) return;
+    if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      saveTrades(trades);
+    }, 2000);
+    return () => {
+      if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+    };
+  }, [trades, saveTrades, dataLoaded]);
+
+  // ===================== FORM HANDLERS =====================
+  const handleFormChange = (e) => {
+    const { name, value, checked, type } = e.target;
+    if (name === 'confluences') {
+      setFormData(prev => ({
+        ...prev,
+        confluences: checked
+          ? [...prev.confluences, value]
+          : prev.confluences.filter(c => c !== value)
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
+      }));
+    }
+  };
+
+  const calculateMetrics = () => {
+    if (formData.entryPrice && formData.exitPrice) {
+      const entry = parseFloat(formData.entryPrice);
+      const exit = parseFloat(formData.exitPrice);
+      const pips = Math.abs(exit - entry) * 10000;
+      setFormData(prev => ({ ...prev, pipsGained: pips.toFixed(1) }));
+    }
+  };
+
+  const handleSaveTrade = () => {
+    if (!formData.pair || !formData.entryPrice || !formData.exitPrice) {
+      alert('Please fill in required fields: Pair, Entry Price, Exit Price');
+      return;
+    }
+    if (editingId) {
+      setTrades(prev => prev.map(t => t.id === editingId ? { ...formData, id: editingId } : t));
+      setEditingId(null);
+    } else {
+      const newTrade = { ...formData, id: Date.now(), createdAt: new Date().toISOString() };
+      setTrades(prev => [newTrade, ...prev]);
+    }
+    setFormData({ ...emptyForm, date: new Date().toISOString().split('T')[0] });
+    setCurrentPage('trade-log');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setFormData({ ...emptyForm, date: new Date().toISOString().split('T')[0] });
+  };
+
+  // ===================== ANALYTICS FUNCTIONS =====================
+  const calculateStats = (tradeList) => {
+    const list = tradeList || trades;
+    if (list.length === 0) {
+      return {
+        totalTrades: 0, wins: 0, losses: 0, breakevens: 0,
+        winRate: 0, totalProfit: 0, avgWin: 0, avgLoss: 0,
+        profitFactor: 0, expectancy: 0, bestTrade: null,
+        worstTrade: null, currentStreak: 0, bestStreak: 0,
+        avgRR: 0, totalPips: 0,
+      };
+    }
+
+    let wins = 0, losses = 0, breakevens = 0;
+    let totalProfit = 0, totalWin = 0, totalLoss = 0;
+    let bestTrade = null, worstTrade = null;
+    let currentStreak = 0, bestStreak = 0;
+    let totalPips = 0;
+
+    list.forEach((trade) => {
+      const profit = parseFloat(trade.riskAmount) || 0;
+      const pips = parseFloat(trade.pipsGained) || 0;
+      totalProfit += profit;
+      totalPips += pips;
+
+      if (trade.outcome === 'Win') {
+        wins++;
+        totalWin += Math.abs(profit);
+        currentStreak++;
+      } else if (trade.outcome === 'Breakeven') {
+        breakevens++;
+        currentStreak = 0;
+      } else {
+        losses++;
+        totalLoss += Math.abs(profit);
+        currentStreak = 0;
+      }
+
+      if (bestTrade === null || profit > (parseFloat(bestTrade.riskAmount) || 0)) bestTrade = trade;
+      if (worstTrade === null || profit < (parseFloat(worstTrade.riskAmount) || 0)) worstTrade = trade;
+      if (currentStreak > bestStreak) bestStreak = currentStreak;
+    });
+
+    const winRate = list.length > 0 ? ((wins / list.length) * 100).toFixed(2) : 0;
+    const avgWin = wins > 0 ? (totalWin / wins).toFixed(2) : 0;
+    const avgLoss = losses > 0 ? (totalLoss / losses).toFixed(2) : 0;
+    const profitFactor = totalLoss > 0 ? (totalWin / totalLoss).toFixed(2) : totalWin > 0 ? '∞' : 0;
+    const expectancy = list.length > 0 ? (totalProfit / list.length).toFixed(2) : 0;
+    const avgRR = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : 0;
+
+    return {
+      totalTrades: list.length, wins, losses, breakevens,
+      winRate, totalProfit: totalProfit.toFixed(2), avgWin, avgLoss,
+      profitFactor, expectancy, bestTrade, worstTrade,
+      currentStreak, bestStreak, avgRR,
+      totalPips: totalPips.toFixed(1),
+    };
+  };
+
+  const getPairPerformance = () => {
+    const pairStats = {};
+    trades.forEach(trade => {
+      if (!pairStats[trade.pair]) pairStats[trade.pair] = { wins: 0, losses: 0, profit: 0, trades: 0 };
+      pairStats[trade.pair].trades++;
+      if (trade.outcome === 'Win') pairStats[trade.pair].wins++;
+      else if (trade.outcome === 'Loss') pairStats[trade.pair].losses++;
+      pairStats[trade.pair].profit += parseFloat(trade.riskAmount) || 0;
+    });
+    return Object.entries(pairStats)
+      .map(([pair, s]) => ({ pair, ...s, winRate: s.trades > 0 ? ((s.wins / s.trades) * 100).toFixed(1) : 0 }))
+      .sort((a, b) => b.profit - a.profit);
+  };
+
+  const getSetupPerformance = () => {
+    const setupStats = {};
+    trades.forEach(trade => {
+      if (!setupStats[trade.setup]) setupStats[trade.setup] = { wins: 0, losses: 0, profit: 0, trades: 0 };
+      setupStats[trade.setup].trades++;
+      if (trade.outcome === 'Win') setupStats[trade.setup].wins++;
+      else if (trade.outcome === 'Loss') setupStats[trade.setup].losses++;
+      setupStats[trade.setup].profit += parseFloat(trade.riskAmount) || 0;
+    });
+    return Object.entries(setupStats)
+      .map(([setup, s]) => ({ setup, ...s, winRate: s.trades > 0 ? ((s.wins / s.trades) * 100).toFixed(1) : 0 }))
+      .sort((a, b) => b.profit - a.profit);
+  };
+
+  const getEmotionPerformance = () => {
+    const emotionStats = {};
+    trades.forEach(trade => {
+      if (!emotionStats[trade.emotion]) emotionStats[trade.emotion] = { wins: 0, losses: 0, profit: 0, trades: 0 };
+      emotionStats[trade.emotion].trades++;
+      if (trade.outcome === 'Win') emotionStats[trade.emotion].wins++;
+      else if (trade.outcome === 'Loss') emotionStats[trade.emotion].losses++;
+      emotionStats[trade.emotion].profit += parseFloat(trade.riskAmount) || 0;
+    });
+    return Object.entries(emotionStats)
+      .map(([emotion, s]) => ({ emotion, ...s, winRate: s.trades > 0 ? ((s.wins / s.trades) * 100).toFixed(1) : 0 }))
+      .sort((a, b) => b.winRate - a.winRate);
+  };
+
+  const getSessionPerformance = () => {
+    const sessionStats = {};
+    trades.forEach(trade => {
+      if (!sessionStats[trade.session]) sessionStats[trade.session] = { wins: 0, losses: 0, profit: 0, trades: 0 };
+      sessionStats[trade.session].trades++;
+      if (trade.outcome === 'Win') sessionStats[trade.session].wins++;
+      else if (trade.outcome === 'Loss') sessionStats[trade.session].losses++;
+      sessionStats[trade.session].profit += parseFloat(trade.riskAmount) || 0;
+    });
+    return Object.entries(sessionStats)
+      .map(([session, s]) => ({ session, ...s, winRate: s.trades > 0 ? ((s.wins / s.trades) * 100).toFixed(1) : 0 }))
+      .sort((a, b) => b.profit - a.profit);
+  };
+
+  const getGradeDistribution = () => {
+    const gradeStats = {};
+    GRADES.forEach(g => { gradeStats[g] = 0; });
+    trades.forEach(t => { if (gradeStats[t.grade] !== undefined) gradeStats[t.grade]++; });
+    return gradeStats;
+  };
+
+  const getFilteredTradesForSummary = () => {
+    const now = new Date();
+    if (summaryPeriod === 'week') {
+      const weekAgo = new Date(now);
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      return trades.filter(t => new Date(t.date) >= weekAgo);
+    } else if (summaryPeriod === 'month') {
+      const monthAgo = new Date(now);
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+      return trades.filter(t => new Date(t.date) >= monthAgo);
+    }
+    return trades;
+  };
+
+  const getMonthlyData = () => {
+    const monthly = {};
+    trades.forEach(trade => {
+      const month = trade.date?.substring(0, 7) || 'Unknown';
+      if (!monthly[month]) monthly[month] = { trades: 0, wins: 0, profit: 0 };
+      monthly[month].trades++;
+      if (trade.outcome === 'Win') monthly[month].wins++;
+      monthly[month].profit += parseFloat(trade.riskAmount) || 0;
+    });
+    return Object.entries(monthly)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([month, data]) => ({
+        month,
+        ...data,
+        winRate: data.trades > 0 ? ((data.wins / data.trades) * 100).toFixed(1) : 0
+      }));
+  };
+
+  const stats = calculateStats();
+  const filteredTrades = trades.filter(t => {
+    const matchesPair = filterPair === 'All Pairs' || t.pair === filterPair;
+    const matchesSearch = t.pair.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.setup || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (t.date || '').includes(searchTerm);
+    return matchesPair && matchesSearch;
+  });
+
+  // ===================== RENDER: DASHBOARD =====================
+  const renderDashboard = () => (
+    <div className="dashboard">
+      <div className="header-stats">
+        <h1>📊 Trading Dashboard</h1>
+        <div className="stat-grid">
+          {[
+            { label: 'Total Trades', value: stats.totalTrades, color: C.accent },
+            { label: 'Wins', value: stats.wins, color: C.green },
+            { label: 'Losses', value: stats.losses, color: C.red },
+            { label: 'Win Rate %', value: `${stats.winRate}%`, color: C.blue },
+            { label: 'Total P&L', value: `${stats.totalProfit >= 0 ? '+' : ''}${stats.totalProfit}`, color: parseFloat(stats.totalProfit) >= 0 ? C.green : C.red },
+            { label: 'Profit Factor', value: stats.profitFactor, color: C.purple },
+            { label: 'Expectancy', value: `$${stats.expectancy}`, color: C.accentLight },
+            { label: 'Best Streak', value: stats.bestStreak, color: C.green },
+          ].map((s, i) => (
+            <div key={i} className="stat-box" style={{ borderColor: s.color }}>
+              <div className="stat-label">{s.label}</div>
+              <div className="stat-value" style={{ color: s.color }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="dashboard-grid">
+        <div className="dashboard-section">
+          <h2>📈 Top Performing Pairs</h2>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <th>Pair</th><th>Trades</th><th>Win Rate</th><th>Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getPairPerformance().slice(0, 5).map((p, idx) => (
+                  <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ color: C.accent }}>{p.pair}</td>
+                    <td>{p.trades}</td>
+                    <td style={{ color: C.blue }}>{p.winRate}%</td>
+                    <td style={{ color: p.profit >= 0 ? C.green : C.red }}>
+                      {p.profit >= 0 ? '+' : ''}{p.profit.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="dashboard-section">
+          <h2>🎯 Setup Performance</h2>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <th>Setup</th><th>Trades</th><th>Win Rate</th><th>Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getSetupPerformance().slice(0, 5).map((s, idx) => (
+                  <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ color: C.accent }}>{s.setup}</td>
+                    <td>{s.trades}</td>
+                    <td style={{ color: C.blue }}>{s.winRate}%</td>
+                    <td style={{ color: s.profit >= 0 ? C.green : C.red }}>
+                      {s.profit >= 0 ? '+' : ''}{s.profit.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent 5 trades */}
+      <div className="dashboard-section" style={{ marginTop: 30 }}>
+        <h2>🕐 Recent Trades</h2>
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <th>Date</th><th>Pair</th><th>Direction</th><th>Outcome</th><th>P&L</th><th>Grade</th>
+              </tr>
+            </thead>
+            <tbody>
+              {trades.slice(0, 5).map((trade) => (
+                <tr key={trade.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td>{trade.date}</td>
+                  <td style={{ color: C.accent }}>{trade.pair}</td>
+                  <td style={{ color: trade.direction === 'Long' ? C.green : C.red }}>{trade.direction}</td>
+                  <td style={{ color: trade.outcome === 'Win' ? C.green : trade.outcome === 'Loss' ? C.red : C.yellow, fontWeight: 'bold' }}>
+                    {trade.outcome}
+                  </td>
+                  <td style={{ color: trade.outcome === 'Win' ? C.green : trade.outcome === 'Loss' ? C.red : C.yellow }}>
+                    {trade.outcome === 'Win' ? '+' : ''}{trade.riskAmount || 0}
+                  </td>
+                  <td style={{ color: C.accent }}>{trade.grade}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {trades.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 40, color: C.textSecondary }}>
+              No trades yet. Click <strong style={{ color: C.accent }}>Log Trade</strong> to get started!
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ===================== RENDER: LOG TRADE =====================
+  const renderLogTrade = () => (
+    <div className="log-trade">
+      <h1>{editingId ? '✏️ Edit Trade' : '📝 Log New Trade'}</h1>
+
+      <div className="form-section">
+        <h2>Trade Basics</h2>
+        <div className="form-grid">
+          {[
+            { label: 'Date', name: 'date', type: 'date' },
+            { label: 'Entry Time', name: 'entryTime', type: 'time' },
+            { label: 'Exit Time', name: 'exitTime', type: 'time' },
+          ].map(f => (
+            <div key={f.name} className="form-group">
+              <label>{f.label}</label>
+              <input type={f.type} name={f.name} value={formData[f.name]} onChange={handleFormChange}
+                style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }} />
+            </div>
+          ))}
+          <div className="form-group">
+            <label>Pair</label>
+            <select name="pair" value={formData.pair} onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }}>
+              {PAIRS.map(p => <option key={p}>{p}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Direction</label>
+            <select name="direction" value={formData.direction} onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }}>
+              <option>Long</option><option>Short</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Session</label>
+            <select name="session" value={formData.session} onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }}>
+              {SESSIONS.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Timeframe</label>
+            <select name="timeframe" value={formData.timeframe} onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }}>
+              {TIMEFRAMES.map(tf => <option key={tf}>{tf}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <h2>Entry & Exit</h2>
+        <div className="form-grid">
+          {[
+            { label: 'Entry Price *', name: 'entryPrice', placeholder: '1.0500' },
+            { label: 'Exit Price *', name: 'exitPrice', placeholder: '1.0510' },
+            { label: 'Stop Loss', name: 'stopLoss', placeholder: '1.0480' },
+            { label: 'Take Profit', name: 'takeProfit', placeholder: '1.0540' },
+          ].map(f => (
+            <div key={f.name} className="form-group">
+              <label>{f.label}</label>
+              <input type="number" step="0.00001" name={f.name} placeholder={f.placeholder}
+                value={formData[f.name]} onChange={handleFormChange} onBlur={calculateMetrics}
+                style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="form-section">
+        <h2>Risk Management</h2>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Risk Amount ($)</label>
+            <input type="number" step="0.01" name="riskAmount" value={formData.riskAmount}
+              onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }} />
+          </div>
+          <div className="form-group">
+            <label>Reward Amount ($)</label>
+            <input type="number" step="0.01" name="rewardAmount" value={formData.rewardAmount}
+              onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }} />
+          </div>
+          <div className="form-group">
+            <label>Lot Size</label>
+            <input type="number" step="0.01" name="lotSize" value={formData.lotSize}
+              onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }} />
+          </div>
+          <div className="form-group">
+            <label>Pips Gained (auto)</label>
+            <input type="number" step="0.1" name="pipsGained" value={formData.pipsGained}
+              onChange={handleFormChange} disabled
+              style={{ background: C.bgInput, color: C.textSecondary, border: `1px solid ${C.border}` }} />
+          </div>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <h2>Trade Quality</h2>
+        <div className="form-grid">
+          <div className="form-group">
+            <label>Setup Type</label>
+            <select name="setup" value={formData.setup} onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }}>
+              {SETUPS.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Emotion During Trade</label>
+            <select name="emotion" value={formData.emotion} onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }}>
+              {EMOTIONS.map(e => <option key={e}>{e}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Outcome</label>
+            <select name="outcome" value={formData.outcome} onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }}>
+              <option>Win</option><option>Loss</option><option>Breakeven</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Grade</label>
+            <select name="grade" value={formData.grade} onChange={handleFormChange}
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }}>
+              {GRADES.map(g => <option key={g}>{g}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="form-section">
+        <h2>Notes & Reflection</h2>
+        {[
+          { label: 'Trade Idea', name: 'tradeIdea', placeholder: 'What was your trading idea and thesis?' },
+          { label: 'Execution Notes', name: 'executionNotes', placeholder: 'How did you execute? Any deviations from plan?' },
+          { label: 'Lesson Learned', name: 'lessonLearned', placeholder: 'What did you learn from this trade?' },
+        ].map(f => (
+          <div key={f.name} className="form-group full-width" style={{ marginBottom: 15 }}>
+            <label>{f.label}</label>
+            <textarea name={f.name} placeholder={f.placeholder} value={formData[f.name]}
+              onChange={handleFormChange} rows="3"
+              style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }} />
+          </div>
+        ))}
+      </div>
+
+      <div className="form-actions">
+        <button onClick={handleSaveTrade} style={{ background: C.accent, color: '#000' }} className="btn-primary">
+          {editingId ? '✏️ UPDATE TRADE' : '⊕ SAVE TRADE'}
+        </button>
+        {editingId && (
+          <button onClick={handleCancelEdit} style={{ background: C.red, color: '#fff' }} className="btn-secondary">
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  // ===================== RENDER: TRADE LOG =====================
+  const renderTradeLog = () => (
+    <div className="trade-log">
+      <h1>📋 Trade Log</h1>
+      <div className="filter-section">
+        <input type="text" placeholder="Search by pair, setup, date..."
+          value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+          style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }} />
+        <select value={filterPair} onChange={(e) => setFilterPair(e.target.value)}
+          style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}` }}>
+          <option>All Pairs</option>
+          {[...new Set(trades.map(t => t.pair))].map(p => <option key={p}>{p}</option>)}
+        </select>
+      </div>
+
+      <div className="table-container">
+        <table>
+          <thead>
+            <tr style={{ borderBottom: `2px solid ${C.accent}` }}>
+              <th>Date</th><th>Pair</th><th>Dir</th><th>Entry</th>
+              <th>Exit</th><th>Pips</th><th>P&L</th><th>Grade</th>
+              <th>Setup</th><th>Emotion</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTrades.map(trade => (
+              <tr key={trade.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                <td>{trade.date}</td>
+                <td style={{ color: C.accent }}>{trade.pair}</td>
+                <td style={{ color: trade.direction === 'Long' ? C.green : C.red }}>{trade.direction}</td>
+                <td>{parseFloat(trade.entryPrice || 0).toFixed(5)}</td>
+                <td>{parseFloat(trade.exitPrice || 0).toFixed(5)}</td>
+                <td style={{ color: C.blue }}>{trade.pipsGained || '-'}</td>
+                <td style={{ color: trade.outcome === 'Win' ? C.green : trade.outcome === 'Loss' ? C.red : C.yellow, fontWeight: 'bold' }}>
+                  {trade.outcome === 'Win' ? '+' : ''}{trade.riskAmount || 0}
+                </td>
+                <td style={{ color: C.accent }}>{trade.grade}</td>
+                <td>{trade.setup}</td>
+                <td style={{ color: C.textSecondary, fontSize: 12 }}>{trade.emotion}</td>
+                <td>
+                  <button className="btn-action" onClick={() => {
+                    setEditingId(trade.id);
+                    setFormData(trade);
+                    setCurrentPage('log-trade');
+                  }} style={{ color: C.blue, marginRight: 8 }}>Edit</button>
+                  <button className="btn-action" onClick={() => {
+                    if (window.confirm('Delete this trade?')) {
+                      setTrades(trades.filter(t => t.id !== trade.id));
+                    }
+                  }} style={{ color: C.red }}>Del</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {filteredTrades.length === 0 && (
+        <div style={{ textAlign: 'center', padding: 40, color: C.textSecondary }}>
+          {trades.length === 0 ? 'No trades recorded yet. Start logging your trades!' : 'No trades match your filter.'}
+        </div>
+      )}
+
+      <div style={{ marginTop: 15, color: C.textSecondary, fontSize: 13 }}>
+        Showing {filteredTrades.length} of {trades.length} trades
+      </div>
+    </div>
+  );
+
+  // ===================== RENDER: ANALYTICS =====================
+  const renderAnalytics = () => (
+    <div className="analytics">
+      <h1>📊 Deep Analysis</h1>
+
+      <div className="analytics-grid">
+        <div className="analytics-section">
+          <h2>Pair Analysis</h2>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <th>Pair</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getPairPerformance().map((p, idx) => (
+                  <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ color: C.accent }}>{p.pair}</td>
+                    <td>{p.trades}</td>
+                    <td style={{ color: C.green }}>{p.wins}</td>
+                    <td style={{ color: C.blue }}>{p.winRate}%</td>
+                    <td style={{ color: p.profit >= 0 ? C.green : C.red }}>
+                      {p.profit >= 0 ? '+' : ''}{p.profit.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="analytics-section">
+          <h2>Setup Analysis</h2>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <th>Setup</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getSetupPerformance().map((s, idx) => (
+                  <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ color: C.accent }}>{s.setup}</td>
+                    <td>{s.trades}</td>
+                    <td style={{ color: C.green }}>{s.wins}</td>
+                    <td style={{ color: C.blue }}>{s.winRate}%</td>
+                    <td style={{ color: s.profit >= 0 ? C.green : C.red }}>
+                      {s.profit >= 0 ? '+' : ''}{s.profit.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="analytics-section">
+          <h2>Psychology / Emotion Analysis</h2>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <th>Emotion</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getEmotionPerformance().map((e, idx) => (
+                  <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ color: C.accent }}>{e.emotion}</td>
+                    <td>{e.trades}</td>
+                    <td style={{ color: C.green }}>{e.wins}</td>
+                    <td style={{ color: parseFloat(e.winRate) >= 50 ? C.green : C.red }}>{e.winRate}%</td>
+                    <td style={{ color: e.profit >= 0 ? C.green : C.red }}>
+                      {e.profit >= 0 ? '+' : ''}{e.profit.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="analytics-section">
+          <h2>Session Analysis</h2>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <th>Session</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>Profit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getSessionPerformance().map((s, idx) => (
+                  <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    <td style={{ color: C.accent }}>{s.session}</td>
+                    <td>{s.trades}</td>
+                    <td style={{ color: C.green }}>{s.wins}</td>
+                    <td style={{ color: C.blue }}>{s.winRate}%</td>
+                    <td style={{ color: s.profit >= 0 ? C.green : C.red }}>
+                      {s.profit >= 0 ? '+' : ''}{s.profit.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="analytics-section" style={{ marginTop: 30 }}>
+        <h2>📈 Key Metrics</h2>
+        <div className="metrics-grid">
+          {[
+            { label: 'Avg Win', value: `$${stats.avgWin}`, color: C.green },
+            { label: 'Avg Loss', value: `-$${stats.avgLoss}`, color: C.red },
+            { label: 'Avg R:R', value: `${stats.avgRR}`, color: C.blue },
+            { label: 'Profit Factor', value: stats.profitFactor, color: C.purple },
+            { label: 'Expectancy', value: `$${stats.expectancy}`, color: C.accentLight },
+            { label: 'Total Pips', value: stats.totalPips, color: C.accent },
+          ].map((m, i) => (
+            <div key={i} className="metric-card">
+              <div className="metric-label">{m.label}</div>
+              <div className="metric-value" style={{ color: m.color }}>{m.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="analytics-section" style={{ marginTop: 30 }}>
+        <h2>📅 Monthly Performance</h2>
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                <th>Month</th><th>Trades</th><th>Wins</th><th>Win Rate</th><th>Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              {getMonthlyData().map((m, idx) => (
+                <tr key={idx} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={{ color: C.accent }}>{m.month}</td>
+                  <td>{m.trades}</td>
+                  <td style={{ color: C.green }}>{m.wins}</td>
+                  <td style={{ color: C.blue }}>{m.winRate}%</td>
+                  <td style={{ color: m.profit >= 0 ? C.green : C.red }}>
+                    {m.profit >= 0 ? '+' : ''}{m.profit.toFixed(2)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ===================== RENDER: FINAL SUMMARY =====================
+  const renderFinalSummary = () => {
+    const summaryTrades = getFilteredTradesForSummary();
+    const s = calculateStats(summaryTrades);
+    const gradeDistrib = (() => {
+      const d = {};
+      GRADES.forEach(g => { d[g] = 0; });
+      summaryTrades.forEach(t => { if (d[t.grade] !== undefined) d[t.grade]++; });
+      return d;
+    })();
+
+    const emotionWinMap = {};
+    summaryTrades.forEach(t => {
+      if (!emotionWinMap[t.emotion]) emotionWinMap[t.emotion] = { wins: 0, total: 0 };
+      emotionWinMap[t.emotion].total++;
+      if (t.outcome === 'Win') emotionWinMap[t.emotion].wins++;
+    });
+    const bestEmotion = Object.entries(emotionWinMap)
+      .filter(([, v]) => v.total >= 2)
+      .sort(([, a], [, b]) => (b.wins / b.total) - (a.wins / a.total))[0];
+    const worstEmotion = Object.entries(emotionWinMap)
+      .filter(([, v]) => v.total >= 2)
+      .sort(([, a], [, b]) => (a.wins / a.total) - (b.wins / b.total))[0];
+
+    const setupWinMap = {};
+    summaryTrades.forEach(t => {
+      if (!setupWinMap[t.setup]) setupWinMap[t.setup] = { wins: 0, total: 0 };
+      setupWinMap[t.setup].total++;
+      if (t.outcome === 'Win') setupWinMap[t.setup].wins++;
+    });
+    const bestSetup = Object.entries(setupWinMap)
+      .filter(([, v]) => v.total >= 2)
+      .sort(([, a], [, b]) => (b.wins / b.total) - (a.wins / a.total))[0];
+
+    const strengths = [];
+    const improvements = [];
+
+    if (parseFloat(s.winRate) >= 55) strengths.push(`Strong win rate of ${s.winRate}%`);
+    else improvements.push(`Win rate is ${s.winRate}% — target 55%+`);
+
+    if (parseFloat(s.profitFactor) >= 1.5) strengths.push(`Profit factor of ${s.profitFactor} is healthy`);
+    else if (parseFloat(s.profitFactor) > 0) improvements.push(`Profit factor ${s.profitFactor} needs improvement (target 1.5+)`);
+
+    if (parseFloat(s.avgRR) >= 2) strengths.push(`Average R:R of ${s.avgRR} shows disciplined reward-seeking`);
+    else if (s.avgRR > 0) improvements.push(`Average R:R is ${s.avgRR} — try to target 2:1 or higher`);
+
+    if (bestSetup) strengths.push(`Best setup is "${bestSetup[0]}" (${((bestSetup[1].wins / bestSetup[1].total) * 100).toFixed(0)}% win rate)`);
+    if (bestEmotion) strengths.push(`You perform best when "${bestEmotion[0]}" (${((bestEmotion[1].wins / bestEmotion[1].total) * 100).toFixed(0)}% win rate)`);
+    if (worstEmotion && worstEmotion[0] !== bestEmotion?.[0]) {
+      improvements.push(`Avoid trading when "${worstEmotion[0]}" (${((worstEmotion[1].wins / worstEmotion[1].total) * 100).toFixed(0)}% win rate)`);
+    }
+
+    const aGrades = (gradeDistrib['A+'] || 0) + (gradeDistrib['A'] || 0);
+    const lowGrades = (gradeDistrib['D'] || 0) + (gradeDistrib['F'] || 0);
+    if (s.totalTrades > 0) {
+      const aPct = ((aGrades / s.totalTrades) * 100).toFixed(0);
+      if (aGrades > s.totalTrades / 2) strengths.push(`${aPct}% of trades are A/A+ quality`);
+      if (lowGrades > 0) improvements.push(`${lowGrades} D/F grade trades — review and learn from these`);
+    }
+
+    const overallScore = (() => {
+      let score = 0;
+      if (parseFloat(s.winRate) >= 55) score += 25;
+      else if (parseFloat(s.winRate) >= 45) score += 15;
+      else score += 5;
+      if (parseFloat(s.profitFactor) >= 2) score += 25;
+      else if (parseFloat(s.profitFactor) >= 1.5) score += 18;
+      else if (parseFloat(s.profitFactor) >= 1) score += 10;
+      if (parseFloat(s.avgRR) >= 2) score += 20;
+      else if (parseFloat(s.avgRR) >= 1.5) score += 13;
+      else score += 5;
+      if (s.totalTrades > 0) {
+        const aPct = aGrades / s.totalTrades;
+        if (aPct >= 0.6) score += 15;
+        else if (aPct >= 0.4) score += 10;
+        else score += 5;
+      }
+      if (s.totalTrades >= 10) score += 15;
+      else if (s.totalTrades >= 5) score += 10;
+      return Math.min(100, score);
+    })();
+
+    const scoreColor = overallScore >= 75 ? C.green : overallScore >= 50 ? C.yellow : C.red;
+    const scoreLabel = overallScore >= 80 ? 'ELITE TRADER' : overallScore >= 65 ? 'ABOVE AVERAGE' : overallScore >= 50 ? 'DEVELOPING' : 'NEEDS WORK';
+
+    return (
+      <div className="analytics">
+        <h1>🏆 Final Performance Summary</h1>
+
+        {/* Period Selector */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 25 }}>
+          {[['week', 'Last 7 Days'], ['month', 'Last 30 Days'], ['all', 'All Time']].map(([val, label]) => (
+            <button key={val} onClick={() => setSummaryPeriod(val)}
+              style={{
+                padding: '8px 20px', borderRadius: 4, border: 'none',
+                background: summaryPeriod === val ? C.accent : C.bgPanel,
+                color: summaryPeriod === val ? '#000' : C.text,
+                cursor: 'pointer', fontWeight: 'bold', fontFamily: 'inherit',
+                border: `1px solid ${summaryPeriod === val ? C.accent : C.border}`
+              }}>{label}</button>
+          ))}
+          <span style={{ alignSelf: 'center', color: C.textSecondary, fontSize: 13 }}>
+            {summaryTrades.length} trades in period
+          </span>
+        </div>
+
+        {summaryTrades.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 60, color: C.textSecondary }}>
+            No trades in this period. Select a wider range or log some trades first.
+          </div>
+        ) : (
+          <>
+            {/* Overall Score */}
+            <div style={{
+              background: C.bgPanel, border: `2px solid ${scoreColor}`,
+              borderRadius: 12, padding: 30, marginBottom: 30, textAlign: 'center'
+            }}>
+              <div style={{ fontSize: 13, color: C.textSecondary, textTransform: 'uppercase', letterSpacing: 2, marginBottom: 10 }}>
+                Overall Trading Score
+              </div>
+              <div style={{ fontSize: 72, fontWeight: 'bold', color: scoreColor, lineHeight: 1 }}>
+                {overallScore}
+              </div>
+              <div style={{ fontSize: 18, color: scoreColor, marginTop: 8, fontWeight: 'bold', letterSpacing: 3 }}>
+                {scoreLabel}
+              </div>
+              <div style={{ fontSize: 13, color: C.textSecondary, marginTop: 10 }}>
+                Based on win rate, profit factor, R:R, trade quality & consistency
+              </div>
+            </div>
+
+            {/* Core Stats Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+              gap: 15, marginBottom: 30
+            }}>
+              {[
+                { label: 'Trades', value: s.totalTrades, color: C.accent },
+                { label: 'Wins', value: s.wins, color: C.green },
+                { label: 'Losses', value: s.losses, color: C.red },
+                { label: 'Breakevens', value: s.breakevens, color: C.yellow },
+                { label: 'Win Rate', value: `${s.winRate}%`, color: parseFloat(s.winRate) >= 55 ? C.green : C.yellow },
+                { label: 'Total P&L', value: `$${s.totalProfit}`, color: parseFloat(s.totalProfit) >= 0 ? C.green : C.red },
+                { label: 'Profit Factor', value: s.profitFactor, color: parseFloat(s.profitFactor) >= 1.5 ? C.green : C.yellow },
+                { label: 'Avg R:R', value: s.avgRR, color: parseFloat(s.avgRR) >= 2 ? C.green : C.yellow },
+                { label: 'Expectancy', value: `$${s.expectancy}`, color: parseFloat(s.expectancy) >= 0 ? C.green : C.red },
+                { label: 'Total Pips', value: s.totalPips, color: C.blue },
+                { label: 'Best Streak', value: s.bestStreak, color: C.green },
+                { label: 'Avg Win', value: `$${s.avgWin}`, color: C.green },
+              ].map((item, i) => (
+                <div key={i} style={{
+                  background: C.bgPanel, border: `1px solid ${C.border}`,
+                  borderRadius: 8, padding: '15px', textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: 11, textTransform: 'uppercase', color: C.textSecondary, marginBottom: 8 }}>
+                    {item.label}
+                  </div>
+                  <div style={{ fontSize: 22, fontWeight: 'bold', color: item.color }}>
+                    {item.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Best & Worst Trade */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 30 }}>
+              {s.bestTrade && (
+                <div style={{
+                  background: C.bgPanel, border: `1px solid ${C.green}`,
+                  borderRadius: 8, padding: 20
+                }}>
+                  <h3 style={{ color: C.green, marginBottom: 12 }}>🏆 Best Trade</h3>
+                  {[
+                    ['Pair', s.bestTrade.pair],
+                    ['Date', s.bestTrade.date],
+                    ['Setup', s.bestTrade.setup],
+                    ['P&L', `+$${s.bestTrade.riskAmount}`],
+                    ['Grade', s.bestTrade.grade],
+                    ['Emotion', s.bestTrade.emotion],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 14 }}>
+                      <span style={{ color: C.textSecondary }}>{k}</span>
+                      <span style={{ color: k === 'P&L' ? C.green : C.text, fontWeight: 'bold' }}>{v}</span>
+                    </div>
+                  ))}
+                  {s.bestTrade.lessonLearned && (
+                    <div style={{ marginTop: 10, padding: 10, background: C.bgInput, borderRadius: 4, fontSize: 12, color: C.textSecondary, fontStyle: 'italic' }}>
+                      "{s.bestTrade.lessonLearned}"
+                    </div>
+                  )}
+                </div>
+              )}
+              {s.worstTrade && (
+                <div style={{
+                  background: C.bgPanel, border: `1px solid ${C.red}`,
+                  borderRadius: 8, padding: 20
+                }}>
+                  <h3 style={{ color: C.red, marginBottom: 12 }}>⚠️ Worst Trade</h3>
+                  {[
+                    ['Pair', s.worstTrade.pair],
+                    ['Date', s.worstTrade.date],
+                    ['Setup', s.worstTrade.setup],
+                    ['P&L', `$${s.worstTrade.riskAmount}`],
+                    ['Grade', s.worstTrade.grade],
+                    ['Emotion', s.worstTrade.emotion],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 14 }}>
+                      <span style={{ color: C.textSecondary }}>{k}</span>
+                      <span style={{ color: k === 'P&L' ? C.red : C.text, fontWeight: 'bold' }}>{v}</span>
+                    </div>
+                  ))}
+                  {s.worstTrade.lessonLearned && (
+                    <div style={{ marginTop: 10, padding: 10, background: C.bgInput, borderRadius: 4, fontSize: 12, color: C.textSecondary, fontStyle: 'italic' }}>
+                      "{s.worstTrade.lessonLearned}"
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Grade Distribution */}
+            <div style={{
+              background: C.bgPanel, border: `1px solid ${C.border}`,
+              borderRadius: 8, padding: 20, marginBottom: 30
+            }}>
+              <h2 style={{ marginBottom: 15 }}>🎓 Trade Grade Distribution</h2>
+              <div style={{ display: 'flex', gap: 15, flexWrap: 'wrap' }}>
+                {GRADES.map(g => {
+                  const count = gradeDistrib[g] || 0;
+                  const pct = s.totalTrades > 0 ? ((count / s.totalTrades) * 100).toFixed(0) : 0;
+                  const gradeColor = g === 'A+' || g === 'A' ? C.green : g === 'B' ? C.blue : g === 'C' ? C.yellow : C.red;
+                  return (
+                    <div key={g} style={{ textAlign: 'center', minWidth: 80 }}>
+                      <div style={{
+                        width: 60, height: Math.max(8, (count / Math.max(1, s.totalTrades)) * 120),
+                        background: gradeColor, borderRadius: 4, margin: '0 auto 8px',
+                        opacity: count === 0 ? 0.2 : 1
+                      }} />
+                      <div style={{ color: gradeColor, fontWeight: 'bold', fontSize: 18 }}>{g}</div>
+                      <div style={{ color: C.text, fontSize: 14 }}>{count}</div>
+                      <div style={{ color: C.textSecondary, fontSize: 12 }}>{pct}%</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Strengths & Improvements */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 30 }}>
+              <div style={{
+                background: C.bgPanel, border: `1px solid ${C.green}`,
+                borderRadius: 8, padding: 20
+              }}>
+                <h3 style={{ color: C.green, marginBottom: 15 }}>✅ Your Strengths</h3>
+                {strengths.length > 0 ? strengths.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10, fontSize: 14 }}>
+                    <span style={{ color: C.green, flexShrink: 0 }}>→</span>
+                    <span style={{ color: C.text }}>{s}</span>
+                  </div>
+                )) : (
+                  <div style={{ color: C.textSecondary, fontSize: 13 }}>Log more trades to see your strengths.</div>
+                )}
+              </div>
+              <div style={{
+                background: C.bgPanel, border: `1px solid ${C.yellow}`,
+                borderRadius: 8, padding: 20
+              }}>
+                <h3 style={{ color: C.yellow, marginBottom: 15 }}>🔧 Areas to Improve</h3>
+                {improvements.length > 0 ? improvements.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10, fontSize: 14 }}>
+                    <span style={{ color: C.yellow, flexShrink: 0 }}>→</span>
+                    <span style={{ color: C.text }}>{s}</span>
+                  </div>
+                )) : (
+                  <div style={{ color: C.textSecondary, fontSize: 13 }}>Excellent! No major improvement areas detected.</div>
+                )}
+              </div>
+            </div>
+
+            {/* Action Plan */}
+            <div style={{
+              background: C.bgPanel, border: `1px solid ${C.accent}`,
+              borderRadius: 8, padding: 25
+            }}>
+              <h2 style={{ marginBottom: 20, color: C.accent }}>🎯 Action Plan for Next Period</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 20 }}>
+                {[
+                  {
+                    title: 'Focus On',
+                    icon: '🔥',
+                    color: C.green,
+                    items: [
+                      bestSetup ? `Continue trading "${bestSetup[0]}" setups` : 'Stick to your best setups',
+                      parseFloat(s.winRate) >= 55 ? 'Maintain your current win rate' : 'Wait for higher-probability setups',
+                      'Log all trades immediately after close',
+                    ]
+                  },
+                  {
+                    title: 'Reduce / Stop',
+                    icon: '🚫',
+                    color: C.red,
+                    items: [
+                      worstEmotion ? `Avoid trading when feeling "${worstEmotion[0]}"` : 'Avoid emotional entries',
+                      lowGrades > 0 ? `Review your ${lowGrades} D/F grade trade(s)` : 'Avoid impulsive trades',
+                      parseFloat(s.avgRR) < 1.5 ? 'Stop taking trades with R:R below 1.5' : 'Don\'t deviate from your plan',
+                    ]
+                  },
+                  {
+                    title: 'Goals',
+                    icon: '🏆',
+                    color: C.blue,
+                    items: [
+                      `Win rate target: ${Math.max(55, Math.ceil(parseFloat(s.winRate) / 5) * 5)}%`,
+                      `Profit factor target: ${Math.max(1.5, parseFloat(s.profitFactor) + 0.3).toFixed(1)}`,
+                      `Aim for ${Math.min(30, s.totalTrades + 5)} quality trades next period`,
+                    ]
+                  }
+                ].map(section => (
+                  <div key={section.title}>
+                    <div style={{ fontSize: 15, fontWeight: 'bold', color: section.color, marginBottom: 12 }}>
+                      {section.icon} {section.title}
+                    </div>
+                    {section.items.map((item, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 8, fontSize: 13 }}>
+                        <span style={{ color: section.color, flexShrink: 0 }}>▸</span>
+                        <span style={{ color: C.text }}>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Lessons From Trades */}
+            {summaryTrades.filter(t => t.lessonLearned).length > 0 && (
+              <div style={{
+                background: C.bgPanel, border: `1px solid ${C.border}`,
+                borderRadius: 8, padding: 20, marginTop: 25
+              }}>
+                <h2 style={{ marginBottom: 15 }}>📚 Lessons Learned This Period</h2>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {summaryTrades
+                    .filter(t => t.lessonLearned)
+                    .slice(0, 5)
+                    .map((t, i) => (
+                      <div key={i} style={{
+                        padding: '12px 15px', background: C.bgInput,
+                        borderRadius: 6, borderLeft: `3px solid ${t.outcome === 'Win' ? C.green : C.red}`
+                      }}>
+                        <div style={{ fontSize: 11, color: C.textSecondary, marginBottom: 6 }}>
+                          {t.date} · {t.pair} · {t.outcome === 'Win' ? '✅ Win' : t.outcome === 'Loss' ? '❌ Loss' : '⬜ BE'}
+                        </div>
+                        <div style={{ fontSize: 13, color: C.text, fontStyle: 'italic' }}>
+                          "{t.lessonLearned}"
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // ===================== RENDER: RULES =====================
+  const renderRules = () => (
+    <div className="rules">
+      <h1>📚 Trading Rules Repository</h1>
+      <div className="rules-grid">
+        {[
+          { title: '✅ Entry Rules', color: C.green, rules: [
+            'Only enter on confirmed setups',
+            'Wait for 3 confluences minimum',
+            'Never enter against trend without pullback',
+            'Trade only during liquid hours',
+            'Risk/reward ratio minimum 1:2',
+          ]},
+          { title: '❌ Exit Rules', color: C.red, rules: [
+            'Follow your stop loss (no exceptions)',
+            'Take profits at pre-determined levels',
+            'Exit if trade idea invalidates',
+            'Avoid moving SL in losing direction',
+            'Lock profits on strong trends',
+          ]},
+          { title: '⚠️ Risk Management', color: C.yellow, rules: [
+            'Risk max 2% per trade',
+            'Position size before entry',
+            'Never average down',
+            'Daily loss limit: 5%',
+            'Weekly loss limit: 10%',
+          ]},
+          { title: '🧠 Psychology Rules', color: C.blue, rules: [
+            'No emotional trading',
+            'No revenge trading',
+            'Skip sessions when frustrated',
+            'Journal every trade immediately',
+            'Review worst trades weekly',
+          ]},
+          { title: '📊 Performance Standards', color: C.purple, rules: [
+            'Target win rate: 55%+',
+            'Target profit factor: 1.5+',
+            'Best trades: A or A+ grades only',
+            'Avoid breakeven trades',
+            'Review plan adherence weekly',
+          ]},
+          { title: '🚫 Trading Forbidden', color: C.accent, rules: [
+            'No scalping against trend',
+            'No news trading alone',
+            'No oversized positions',
+            'No "revenge trades"',
+            'No trading before major news',
+          ]},
+        ].map((card, idx) => (
+          <div key={idx} className="rule-card" style={{ borderLeft: `4px solid ${card.color}` }}>
+            <h3>{card.title}</h3>
+            <ul>
+              {card.rules.map((rule, ri) => <li key={ri}>{rule}</li>)}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  // ===================== RENDER: MT5 SYNC =====================
+  const renderMt5 = () => {
+    const card = (children, style = {}) => (
+      <div style={{ background: C.bgPanel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20, ...style }}>
+        {children}
+      </div>
+    );
+    const statBox = (label, value, color = C.text) => (
+      <div style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 8, padding: '14px 18px', textAlign: 'center' }}>
+        <div style={{ fontSize: 11, color: C.textSecondary, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>{label}</div>
+        <div style={{ fontSize: 22, fontWeight: 'bold', color }}>{value}</div>
+      </div>
+    );
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h1 style={{ margin: 0 }}>🔗 MT5 Live Sync</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: mt5Connected ? 'rgba(0,200,83,0.1)' : 'rgba(255,23,68,0.1)', border: `1px solid ${mt5Connected ? C.green : C.red}`, borderRadius: 20, padding: '6px 14px', fontSize: 13 }}>
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: mt5Connected ? C.green : C.red, boxShadow: mt5Connected ? `0 0 6px ${C.green}` : 'none' }} />
+              <span style={{ color: mt5Connected ? C.green : C.red }}>{mt5Connected ? 'Connected' : 'Disconnected'}</span>
+            </div>
+            <button onClick={() => { fetchMt5Data(); fetchMt5History(mt5HistoryDays); }}
+              style={{ background: C.accent, color: '#000', border: 'none', borderRadius: 8, padding: '8px 16px', cursor: 'pointer', fontWeight: 'bold', fontSize: 13 }}>
+              🔄 Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* ACCOUNT SWITCHER */}
+        {mt5Accounts.length > 0 && (
+          <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+            {mt5Accounts.map((acc, i) => (
+              <button key={i} onClick={() => switchMt5Account(i)} disabled={mt5Switching}
+                style={{
+                  background: i === mt5ActiveAccount ? C.accent : C.bgPanel,
+                  color: i === mt5ActiveAccount ? '#000' : C.text,
+                  border: `1px solid ${i === mt5ActiveAccount ? C.accent : C.border}`,
+                  borderRadius: 8, padding: '10px 16px', cursor: mt5Switching ? 'wait' : 'pointer',
+                  fontWeight: i === mt5ActiveAccount ? 'bold' : 'normal', fontSize: 13,
+                  opacity: mt5Switching ? 0.6 : 1, transition: 'all 0.2s',
+                }}>
+                {mt5Switching && i === mt5ActiveAccount ? '⏳' : '🏦'} {acc.name || `Account ${i + 1}`}
+                <span style={{ fontSize: 11, marginLeft: 6, opacity: 0.7 }}>#{acc.login}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {mt5Error && (
+          <div style={{ background: 'rgba(255,23,68,0.1)', border: `1px solid ${C.red}`, borderRadius: 10, padding: 16, marginBottom: 20, color: C.red, fontSize: 14 }}>
+            ⚠️ {mt5Error}
+            <div style={{ marginTop: 10, color: C.textSecondary, fontSize: 12 }}>
+              To fix: Open CMD and run → <code style={{ background: C.bgInput, padding: '2px 8px', borderRadius: 4 }}>python mt5_bridge.py</code> from your app folder. Keep that window open.
+            </div>
+          </div>
+        )}
+
+        {mt5Loading && !mt5Account && (
+          <div style={{ textAlign: 'center', padding: 60, color: C.textSecondary }}>Connecting to MT5...</div>
+        )}
+
+        {/* ACCOUNT EDITOR */}
+        {mt5Accounts.length > 0 && (
+          <details style={{ marginBottom: 20 }}>
+            <summary style={{ cursor: 'pointer', color: C.accent, fontSize: 13, padding: '10px 0', userSelect: 'none' }}>
+              ⚙️ Configure Accounts (click to expand)
+            </summary>
+            <div style={{ background: C.bgPanel, border: `1px solid ${C.border}`, borderRadius: 10, padding: 20, marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: C.textSecondary, marginBottom: 16 }}>
+                Enter your MT5 login, password, and server for each account. Click Save when done.
+              </div>
+              {mt5Accounts.map((acc, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '140px 120px 180px 180px', gap: 10, marginBottom: 12, alignItems: 'center' }}>
+                  <input placeholder={`Account ${i+1} Name`} defaultValue={acc.name}
+                    id={`mt5-name-${i}`}
+                    style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 10px', color: C.text, fontSize: 13 }} />
+                  <input placeholder="Login #" defaultValue={acc.login || ''}
+                    id={`mt5-login-${i}`} type="number"
+                    style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 10px', color: C.text, fontSize: 13 }} />
+                  <input placeholder="Password" defaultValue={acc.password || ''}
+                    id={`mt5-password-${i}`} type="password"
+                    style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 10px', color: C.text, fontSize: 13 }} />
+                  <input placeholder="Server (e.g. ICMarkets-Live)" defaultValue={acc.server || ''}
+                    id={`mt5-server-${i}`}
+                    style={{ background: C.bgInput, border: `1px solid ${C.border}`, borderRadius: 6, padding: '8px 10px', color: C.text, fontSize: 13 }} />
+                </div>
+              ))}
+              <button onClick={async () => {
+                const updated = mt5Accounts.map((acc, i) => ({
+                  ...acc,
+                  name: document.getElementById(`mt5-name-${i}`).value || acc.name,
+                  login: parseInt(document.getElementById(`mt5-login-${i}`).value) || 0,
+                  password: document.getElementById(`mt5-password-${i}`).value || '',
+                  server: document.getElementById(`mt5-server-${i}`).value || '',
+                }));
+                try {
+                  const res = await fetch(`${MT5_URL}/save-accounts`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updated)
+                  });
+                  if ((await res.json()).success) {
+                    alert('✅ Accounts saved! Switch accounts using the buttons above.');
+                    fetchMt5Data();
+                  }
+                } catch (e) { alert('Failed to save'); }
+              }} style={{ background: C.green, color: '#000', border: 'none', borderRadius: 8, padding: '10px 24px', cursor: 'pointer', fontWeight: 'bold', fontSize: 14, marginTop: 8 }}>
+                💾 Save Accounts
+              </button>
+            </div>
+          </details>
+        )}
+
+        {mt5Account && (
+          <>
+            {/* Account Info */}
+            {card(<>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h2 style={{ margin: 0, borderBottom: 'none', paddingBottom: 0 }}>Account Info</h2>
+                <span style={{ fontSize: 12, color: C.textSecondary }}>#{mt5Account.login} · {mt5Account.server}</span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                {statBox('Balance', `$${mt5Account.balance.toLocaleString()}`, C.accent)}
+                {statBox('Equity', `$${mt5Account.equity.toLocaleString()}`, mt5Account.equity >= mt5Account.balance ? C.green : C.red)}
+                {statBox('Free Margin', `$${mt5Account.freeMargin.toLocaleString()}`, C.blue)}
+                {statBox('Open P&L', `${mt5Account.profit >= 0 ? '+' : ''}$${mt5Account.profit.toLocaleString()}`, mt5Account.profit >= 0 ? C.green : C.red)}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginTop: 12 }}>
+                {statBox('Leverage', `1:${mt5Account.leverage}`, C.text)}
+                {statBox('Margin Level', `${mt5Account.marginLevel}%`, mt5Account.marginLevel > 200 ? C.green : C.yellow)}
+                {statBox('Account Type', mt5Account.accountType, mt5Account.accountType === 'Demo' ? C.yellow : C.green)}
+              </div>
+            </>, { marginBottom: 20 })}
+
+            {/* 30-Day Summary */}
+            {mt5Summary && card(<>
+              <h2 style={{ marginBottom: 16 }}>📊 Last 30 Days Summary</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                {statBox('Total Trades', mt5Summary.totalTrades, C.text)}
+                {statBox('Win Rate', `${mt5Summary.winRate}%`, mt5Summary.winRate >= 50 ? C.green : C.red)}
+                {statBox('Total P&L', `${mt5Summary.totalProfit >= 0 ? '+' : ''}$${mt5Summary.totalProfit}`, mt5Summary.totalProfit >= 0 ? C.green : C.red)}
+                {statBox('W / L', `${mt5Summary.wins} / ${mt5Summary.losses}`, C.text)}
+              </div>
+            </>, { marginBottom: 20 })}
+
+            {/* Open Positions */}
+            {card(<>
+              <h2 style={{ marginBottom: 16 }}>📌 Open Positions ({mt5OpenTrades.length})</h2>
+              {mt5OpenTrades.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 30, color: C.textSecondary }}>No open positions</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                        {['Ticket', 'Symbol', 'Type', 'Volume', 'Open Price', 'Current', 'SL', 'TP', 'P&L', 'Opened'].map(h => (
+                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: C.textSecondary, fontWeight: 600 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mt5OpenTrades.map(t => (
+                        <tr key={t.ticket} style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td style={{ padding: '10px 12px', color: C.textSecondary }}>{t.ticket}</td>
+                          <td style={{ padding: '10px 12px', fontWeight: 'bold', color: C.accent }}>{t.symbol}</td>
+                          <td style={{ padding: '10px 12px', color: t.type === 'Buy' ? C.green : C.red, fontWeight: 'bold' }}>{t.type}</td>
+                          <td style={{ padding: '10px 12px' }}>{t.volume}</td>
+                          <td style={{ padding: '10px 12px' }}>{t.openPrice}</td>
+                          <td style={{ padding: '10px 12px' }}>{t.currentPrice}</td>
+                          <td style={{ padding: '10px 12px', color: C.red }}>{t.sl || '—'}</td>
+                          <td style={{ padding: '10px 12px', color: C.green }}>{t.tp || '—'}</td>
+                          <td style={{ padding: '10px 12px', fontWeight: 'bold', color: t.profit >= 0 ? C.green : C.red }}>
+                            {t.profit >= 0 ? '+' : ''}${t.profit}
+                          </td>
+                          <td style={{ padding: '10px 12px', color: C.textSecondary, fontSize: 12 }}>{t.openTime}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>, { marginBottom: 20 })}
+
+            {/* Trade History */}
+            {card(<>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <h2 style={{ margin: 0, borderBottom: 'none', paddingBottom: 0 }}>📜 Trade History</h2>
+                <select value={mt5HistoryDays} onChange={e => { setMt5HistoryDays(Number(e.target.value)); fetchMt5History(Number(e.target.value)); }}
+                  style={{ background: C.bgInput, color: C.text, border: `1px solid ${C.border}`, borderRadius: 6, padding: '6px 12px', cursor: 'pointer' }}>
+                  <option value={7}>Last 7 Days</option>
+                  <option value={30}>Last 30 Days</option>
+                  <option value={90}>Last 90 Days</option>
+                  <option value={365}>Last 1 Year</option>
+                </select>
+              </div>
+              {mt5History.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 30, color: C.textSecondary }}>No history found</div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                        {['Time', 'Symbol', 'Type', 'Entry', 'Volume', 'Price', 'P&L', 'Commission'].map(h => (
+                          <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: C.textSecondary, fontWeight: 600 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mt5History.slice(0, 100).map((d, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                          <td style={{ padding: '9px 12px', color: C.textSecondary, fontSize: 12 }}>{d.time}</td>
+                          <td style={{ padding: '9px 12px', fontWeight: 'bold', color: C.accent }}>{d.symbol}</td>
+                          <td style={{ padding: '9px 12px', color: d.type === 'Buy' ? C.green : C.red, fontWeight: 'bold' }}>{d.type}</td>
+                          <td style={{ padding: '9px 12px', color: d.entry === 'In' ? C.blue : C.yellow }}>{d.entry}</td>
+                          <td style={{ padding: '9px 12px' }}>{d.volume}</td>
+                          <td style={{ padding: '9px 12px' }}>{d.price}</td>
+                          <td style={{ padding: '9px 12px', fontWeight: 'bold', color: d.profit >= 0 ? C.green : C.red }}>
+                            {d.profit !== 0 ? `${d.profit >= 0 ? '+' : ''}$${d.profit}` : '—'}
+                          </td>
+                          <td style={{ padding: '9px 12px', color: C.red }}>{d.commission !== 0 ? `$${d.commission}` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>)}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // ===================== MAIN RENDER =====================
+  return (
+    <div className="app" style={{ background: C.bg, color: C.text }}>
+      <style>{`
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Rajdhani', 'Courier New', monospace; background: ${C.bg}; color: ${C.text}; }
+        .app { display: flex; height: 100vh; background: ${C.bg}; }
+
+        .sidebar { width: 240px; background: ${C.bgPanel}; border-right: 1px solid ${C.border}; overflow-y: auto; padding: 20px 0; flex-shrink: 0; }
+        .sidebar-title { padding: 20px; font-size: 17px; font-weight: bold; color: ${C.accent}; border-bottom: 1px solid ${C.border}; text-align: center; }
+        .sidebar-version { text-align: center; font-size: 11px; color: ${C.textSecondary}; padding: 6px; border-bottom: 1px solid ${C.border}; margin-bottom: 8px; }
+
+        .nav-item { padding: 13px 20px; cursor: pointer; transition: all 0.2s; border-left: 3px solid transparent; display: flex; align-items: center; gap: 10px; font-size: 14px; }
+        .nav-item:hover { background: ${C.hover}; border-left-color: ${C.accent}; }
+        .nav-item.active { background: rgba(232,160,32,0.1); border-left-color: ${C.accent}; color: ${C.accent}; }
+
+        .main-content { flex: 1; overflow-y: auto; padding: 30px; background: ${C.bg}; }
+        h1 { font-size: 26px; margin-bottom: 20px; color: ${C.accent}; font-weight: bold; }
+        h2 { font-size: 18px; margin-bottom: 15px; color: ${C.text}; border-bottom: 1px solid ${C.border}; padding-bottom: 10px; }
+
+        .dashboard { animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .header-stats { margin-bottom: 35px; }
+
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; margin-top: 20px; }
+        .stat-box { background: ${C.bgPanel}; border: 1px solid; border-radius: 8px; padding: 18px; text-align: center; transition: all 0.2s; }
+        .stat-box:hover { transform: translateY(-4px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .stat-label { font-size: 11px; text-transform: uppercase; color: ${C.textSecondary}; margin-bottom: 8px; font-weight: bold; letter-spacing: 0.5px; }
+        .stat-value { font-size: 22px; font-weight: bold; }
+
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 25px; margin-bottom: 30px; }
+        .dashboard-section { background: ${C.bgPanel}; border: 1px solid ${C.border}; border-radius: 8px; padding: 20px; }
+
+        .table-container { overflow-x: auto; margin-top: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 10px 12px; text-align: left; }
+        th { background: rgba(232,160,32,0.08); color: ${C.accent}; font-weight: bold; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+        tr:hover { background: ${C.hover}; }
+
+        .log-trade { animation: fadeIn 0.3s; }
+        .form-section { background: ${C.bgPanel}; border: 1px solid ${C.border}; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 18px; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group.full-width { grid-column: 1 / -1; }
+        label { margin-bottom: 6px; color: ${C.accent}; font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+        input, select, textarea { padding: 9px 10px; border-radius: 4px; font-family: inherit; font-size: 13px; transition: all 0.2s; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: ${C.accent} !important; box-shadow: 0 0 5px rgba(232,160,32,0.25); }
+        textarea { resize: vertical; }
+
+        .form-actions { display: flex; gap: 15px; margin-top: 20px; padding-bottom: 30px; }
+        .btn-primary { background: ${C.accent}; color: #000; border: none; padding: 12px 30px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: all 0.2s; font-family: inherit; font-size: 14px; }
+        .btn-primary:hover { background: ${C.accentLight}; transform: translateY(-2px); box-shadow: 0 5px 15px rgba(232,160,32,0.4); }
+        .btn-secondary { background: ${C.red}; color: #fff; border: none; padding: 12px 30px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: all 0.2s; font-family: inherit; }
+        .btn-secondary:hover { background: #ff4466; }
+        .btn-action { background: none; border: none; cursor: pointer; font-weight: bold; padding: 4px 8px; border-radius: 3px; transition: all 0.2s; font-family: inherit; font-size: 12px; }
+        .btn-action:hover { background: rgba(232,160,32,0.1); }
+
+        .trade-log { animation: fadeIn 0.3s; }
+        .filter-section { display: flex; gap: 12px; margin-bottom: 18px; }
+        .filter-section input, .filter-section select { flex: 1; padding: 9px 10px; background: ${C.bgInput}; color: ${C.text}; border: 1px solid ${C.border}; border-radius: 4px; font-family: inherit; font-size: 13px; }
+
+        .analytics { animation: fadeIn 0.3s; }
+        .analytics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 25px; margin-bottom: 25px; }
+        .analytics-section { background: ${C.bgPanel}; border: 1px solid ${C.border}; border-radius: 8px; padding: 20px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 15px; }
+        .metric-card { background: ${C.bgInput}; border: 1px solid ${C.border}; border-radius: 8px; padding: 18px; text-align: center; }
+        .metric-label { font-size: 10px; text-transform: uppercase; color: ${C.textSecondary}; margin-bottom: 8px; letter-spacing: 0.5px; }
+        .metric-value { font-size: 20px; font-weight: bold; }
+
+        .rules { animation: fadeIn 0.3s; }
+        .rules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+        .rule-card { background: ${C.bgPanel}; border: 1px solid ${C.border}; border-radius: 8px; padding: 20px; transition: all 0.2s; }
+        .rule-card:hover { transform: translateY(-4px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .rule-card h3 { margin-bottom: 14px; font-size: 15px; }
+        .rule-card ul { list-style: none; }
+        .rule-card li { padding: 6px 0; color: ${C.textSecondary}; font-size: 13px; line-height: 1.6; }
+        .rule-card li:before { content: "→ "; color: ${C.accent}; }
+
+        .save-indicator { position: fixed; bottom: 20px; right: 20px; padding: 10px 18px; border-radius: 6px; font-weight: bold; font-size: 13px; animation: slideIn 0.3s; z-index: 1000; display: flex; align-items: center; gap: 8px; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+        ::-webkit-scrollbar { width: 7px; height: 7px; }
+        ::-webkit-scrollbar-track { background: ${C.bgPanel}; }
+        ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: ${C.accent}; }
+
+        @media (max-width: 900px) {
+          .dashboard-grid, .analytics-grid { grid-template-columns: 1fr; }
+          .sidebar { width: 200px; }
+          .stat-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+      `}</style>
+
+      {/* SIDEBAR */}
+      <div className="sidebar">
+        <div className="sidebar-title">📊 TRADER PRO</div>
+        <div className="sidebar-version">v2.1 · Auto-Save On</div>
+        {[
+          { page: 'dashboard', label: '📈 Dashboard' },
+          { page: 'log-trade', label: '📝 Log Trade' },
+          { page: 'trade-log', label: '📋 Trade Log' },
+          { page: 'analytics', label: '📊 Analysis' },
+          { page: 'summary', label: '🏆 Final Summary' },
+          { page: 'rules', label: '📚 Rules' },
+          { page: 'mt5', label: '🔗 MT5 Sync' },
+        ].map(nav => (
+          <div key={nav.page}
+            className={`nav-item ${currentPage === nav.page ? 'active' : ''}`}
+            onClick={() => setCurrentPage(nav.page)}
+          >
+            {nav.label}
+          </div>
+        ))}
+        <div style={{ padding: '20px', borderTop: `1px solid ${C.border}`, marginTop: 'auto', fontSize: 12, color: C.textSecondary }}>
+          <div style={{ marginBottom: 6 }}>Total Trades: <span style={{ color: C.accent, fontWeight: 'bold' }}>{trades.length}</span></div>
+          <div>All data saved locally</div>
+        </div>
+      </div>
+
+      {/* MAIN CONTENT */}
+      <div className="main-content">
+        {currentPage === 'dashboard' && renderDashboard()}
+        {currentPage === 'log-trade' && renderLogTrade()}
+        {currentPage === 'trade-log' && renderTradeLog()}
+        {currentPage === 'analytics' && renderAnalytics()}
+        {currentPage === 'summary' && renderFinalSummary()}
+        {currentPage === 'rules' && renderRules()}
+        {currentPage === 'mt5' && renderMt5()}
+      </div>
+
+      {/* SAVE INDICATOR */}
+      {showSaveIndicator && (
+        <div className="save-indicator" style={{
+          background: saveStatus === 'saved' ? C.green : saveStatus === 'error' ? C.red : C.yellow,
+          color: '#fff'
+        }}>
+          {saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'saving' ? '⏳ Saving...' : '⚠ Save Error'}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default App;

@@ -1,0 +1,47 @@
+[
+  {
+    "active": true,
+    "configured": false,
+    "index": 0,
+    "login": 0,
+    "name": "Account 1",
+    "server": "",
+    "password": ""
+  },
+  {
+    "active": false,
+    "configured": false,
+    "index": 1,
+    "login": 0,
+    "name": "Account 2",
+    "server": "",
+    "password": ""
+  },
+  {
+    "active": false,
+    "configured": false,
+    "index": 2,
+    "login": 0,
+    "name": "Account 3",
+    "server": "",
+    "password": ""
+  },
+  {
+    "active": false,
+    "configured": false,
+    "index": 3,
+    "login": 0,
+    "name": "Account 4",
+    "server": "",
+    "password": ""
+  },
+  {
+    "active": false,
+    "configured": false,
+    "index": 4,
+    "login": 0,
+    "name": "Account 5",
+    "server": "",
+    "password": ""
+  }
+]
