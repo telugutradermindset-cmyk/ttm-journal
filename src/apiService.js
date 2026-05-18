@@ -1,16 +1,17 @@
 import axios from 'axios';
 
-// Use your Railway backend URL
-const API_URL = 'https://web-production-2c4af.up.railway.app/api';
+// Set your Railway backend URL here
+const API_BASE_URL = 'https://web-production-2c4af.up.railway.app';
 
+// Create axios instance
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add JWT token to requests
+// Add token to requests
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -19,48 +20,51 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Handle token errors
+// Handle responses
 api.interceptors.response.use(
-  (response) => response,
+  (response) => response.data,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      localStorage.removeItem('user');
       window.location.href = '/login';
     }
-    return Promise.reject(error);
+    throw error;
   }
 );
 
-export const authAPI = {
-  signup: (email, password, name) =>
-    api.post('/auth/signup', { email, password, name }),
+const apiService = {
+  // Auth endpoints
+  signup: (name, email, password) =>
+    api.post('/api/auth/signup', { name, email, password }),
+  
   login: (email, password) =>
-    api.post('/auth/login', { email, password }),
+    api.post('/api/auth/login', { email, password }),
+  
   getMe: () =>
-    api.get('/auth/me'),
-};
+    api.get('/api/auth/me'),
 
-export const tradesAPI = {
-  getAllTrades: () =>
-    api.get('/trades'),
-  createTrade: (trade) =>
-    api.post('/trades', trade),
-  updateTrade: (id, trade) =>
-    api.put(`/trades/${id}`, trade),
+  // Trade endpoints
+  getTrades: () =>
+    api.get('/api/trades'),
+  
+  addTrade: (tradeData) =>
+    api.post('/api/trades', tradeData),
+  
+  updateTrade: (id, tradeData) =>
+    api.put(`/api/trades/${id}`, tradeData),
+  
   deleteTrade: (id) =>
-    api.delete(`/trades/${id}`),
-  bulkImportTrades: (trades) =>
-    api.post('/trades/bulk-import', { trades }),
-  getTradeStats: () =>
-    api.get('/trades/stats'),
-};
+    api.delete(`/api/trades/${id}`),
+  
+  getStats: () =>
+    api.get('/api/trades/stats'),
 
-export const userAPI = {
-  updateProfile: (data) =>
-    api.put('/user/profile', data),
+  // User endpoints
+  updateProfile: (userData) =>
+    api.put('/api/user/profile', userData),
+  
   updatePassword: (oldPassword, newPassword) =>
-    api.post('/user/update-password', { oldPassword, newPassword }),
+    api.post('/api/user/change-password', { oldPassword, newPassword }),
 };
 
-export default api;
+export default apiService;
