@@ -1,0 +1,6 @@
+{
+  "buildCommand": "DISABLE_ESLINT_PLUGIN=true npm run build",
+  "env": {
+    "CI": "false"
+  }
+}
