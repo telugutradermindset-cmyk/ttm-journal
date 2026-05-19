@@ -52,7 +52,7 @@ const Login = () => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-logo">📈 TTM Journal</div>
-        <h2>Login to your account</h2>
+        <h2>War Room Access</h2>
         {error && <div className="error-box">{error}</div>}
         <form onSubmit={handleSubmit}>
           <input
@@ -70,11 +70,11 @@ const Login = () => {
             required
           />
           <button type="submit" disabled={loading}>
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Authenticating...' : 'Enter War Room'}
           </button>
         </form>
         <p>
-          Don't have an account? <Link to="/signup">Sign up</Link>
+          New to TTM? <Link to="/signup">Start your journey</Link>
         </p>
       </div>
     </div>
@@ -114,12 +114,12 @@ const Signup = () => {
     <div className="auth-container">
       <div className="auth-card">
         <div className="auth-logo">📈 TTM Journal</div>
-        <h2>Create an account</h2>
+        <h2>Join the War Room</h2>
         {error && <div className="error-box">{error}</div>}
         <form onSubmit={handleSubmit}>
           <input
             type="text"
-            placeholder="Full Name"
+            placeholder="Trader Name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -139,7 +139,7 @@ const Signup = () => {
             required
           />
           <button type="submit" disabled={loading}>
-            {loading ? 'Creating account...' : 'Sign Up'}
+            {loading ? 'Setting up...' : 'Create Account'}
           </button>
         </form>
         <p>
@@ -151,9 +151,10 @@ const Signup = () => {
 };
 
 // ==================== SIDEBAR ITEM ====================
-const SidebarItem = ({ to, label, active }) => (
+const SidebarItem = ({ to, label, active, icon }) => (
   <Link to={to} className={`sidebar-item ${active ? 'active' : ''}`}>
-    {label}
+    <span className="item-icon">{icon}</span>
+    <span className="item-label">{label}</span>
   </Link>
 );
 
@@ -170,31 +171,39 @@ const Sidebar = () => {
 
   return (
     <div className="sidebar">
-      <div className="logo">📈 TTM<span>Journal</span></div>
-
-      <div className="sidebar-section">
-        <div className="section-label">Trading</div>
-        <SidebarItem to="/" label="Dashboard" active={isActive('/')} />
-        <SidebarItem to="/trades" label="Trade Log" active={isActive('/trades')} />
-        <SidebarItem to="/analytics" label="Analytics" active={isActive('/analytics')} />
-        <SidebarItem to="/backtest" label="Backtesting" active={isActive('/backtest')} />
+      <div className="logo">
+        <span className="logo-glow">⚡</span>
+        <div>
+          <div className="logo-title">TTM</div>
+          <div className="logo-subtitle">War Room</div>
+        </div>
       </div>
 
       <div className="sidebar-section">
-        <div className="section-label">Tools</div>
-        <SidebarItem to="/rules" label="Trading Rules" active={isActive('/rules')} />
-        <SidebarItem to="/profile" label="Profile" active={isActive('/profile')} />
+        <div className="section-label">COMMAND CENTER</div>
+        <SidebarItem to="/" label="Dashboard" active={isActive('/')} icon="🎯" />
+        <SidebarItem to="/trades" label="Trade Log" active={isActive('/trades')} icon="📊" />
+        <SidebarItem to="/analytics" label="Analytics" active={isActive('/analytics')} icon="📈" />
+        <SidebarItem to="/calendar" label="Calendar" active={isActive('/calendar')} icon="📅" />
+        <SidebarItem to="/backtest" label="Backtest" active={isActive('/backtest')} icon="🧪" />
+      </div>
+
+      <div className="sidebar-section">
+        <div className="section-label">ARSENAL</div>
+        <SidebarItem to="/rules" label="Trading Rules" active={isActive('/rules')} icon="📖" />
+        <SidebarItem to="/checklist" label="Pre-Trade Check" active={isActive('/checklist')} icon="✅" />
+        <SidebarItem to="/profile" label="Profile" active={isActive('/profile')} icon="👤" />
       </div>
 
       <div className="upgrade-card">
         <div className="upgrade-icon">🚀</div>
-        <div className="upgrade-title">Upgrade to Pro</div>
-        <div className="upgrade-desc">Unlock advanced features</div>
-        <button className="upgrade-btn">Upgrade Now</button>
+        <div className="upgrade-title">ELITE TRADER</div>
+        <div className="upgrade-desc">Unlock pro features</div>
+        <button className="upgrade-btn">Upgrade</button>
       </div>
 
       <button className="logout-btn" onClick={handleLogout}>
-        🚪 Logout
+        🚪 Exit War Room
       </button>
     </div>
   );
@@ -209,7 +218,129 @@ const Toast = ({ message, type, onClose }) => {
 
   return (
     <div className={`toast ${type}`}>
-      {type === 'success' && '✓'} {type === 'error' && '✕'} {message}
+      {type === 'success' && '✓'} {type === 'error' && '⚠'} {message}
+    </div>
+  );
+};
+
+// ==================== CALENDAR HEATMAP ====================
+const CalendarHeatmap = ({ trades }) => {
+  const getDayColor = (day) => {
+    const trades_for_day = trades.filter(
+      (t) => new Date(t.date).toDateString() === day.toDateString()
+    );
+    if (trades_for_day.length === 0) return '#0f1222';
+    const pnl = trades_for_day.reduce(
+      (sum, t) =>
+        sum +
+        (t.exitPrice - t.entryPrice) *
+          (t.direction === 'long' ? 1 : -1) *
+          t.quantity,
+      0
+    );
+    if (pnl > 100) return '#22c55e';
+    if (pnl > 0) return '#84cc16';
+    if (pnl > -100) return '#ef4444';
+    return '#7f1d1d';
+  };
+
+  const last30Days = [];
+  const today = new Date();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    last30Days.push(d);
+  }
+
+  return (
+    <div className="heatmap">
+      <h3>Last 30 Days P&L Heatmap</h3>
+      <div className="heatmap-grid">
+        {last30Days.map((day, idx) => {
+          const pnl = trades
+            .filter((t) => new Date(t.date).toDateString() === day.toDateString())
+            .reduce(
+              (sum, t) =>
+                sum +
+                (t.exitPrice - t.entryPrice) *
+                  (t.direction === 'long' ? 1 : -1) *
+                  t.quantity,
+              0
+            );
+          return (
+            <div
+              key={idx}
+              className="heatmap-cell"
+              style={{ backgroundColor: getDayColor(day) }}
+              title={`${day.toDateString()}: $${pnl.toFixed(2)}`}
+            />
+          );
+        })}
+      </div>
+      <div className="heatmap-legend">
+        <div style={{ backgroundColor: '#22c55e' }}>+$100</div>
+        <div style={{ backgroundColor: '#84cc16' }}>+$0</div>
+        <div style={{ backgroundColor: '#ef4444' }}>-$100</div>
+        <div style={{ backgroundColor: '#7f1d1d' }}>-$100+</div>
+      </div>
+    </div>
+  );
+};
+
+// ==================== SESSION BREAKDOWN ====================
+const SessionBreakdown = ({ trades }) => {
+  const getSession = (date) => {
+    const hour = new Date(date).getUTCHours();
+    if ((hour >= 8 && hour < 16) || (hour >= 7 && hour < 15)) return 'London';
+    if ((hour >= 13 && hour < 21) || (hour >= 12 && hour < 20)) return 'NY';
+    return 'Asia';
+  };
+
+  const sessions = { London: 0, NY: 0, Asia: 0, LondonWins: 0, NYWins: 0, AsiaWins: 0 };
+  trades.forEach((t) => {
+    const session = getSession(t.date);
+    sessions[session]++;
+    if (t.outcome === 'win') sessions[`${session}Wins`]++;
+  });
+
+  return (
+    <div className="session-breakdown">
+      <h3>📍 Trading Sessions</h3>
+      <div className="session-grid">
+        <div className="session-card london">
+          <div className="session-name">🇬🇧 London</div>
+          <div className="session-stats">
+            <div>{sessions.London} trades</div>
+            <div className="win-rate">
+              {sessions.London > 0
+                ? ((sessions.LondonWins / sessions.London) * 100).toFixed(0)
+                : 0}
+              % win
+            </div>
+          </div>
+        </div>
+        <div className="session-card ny">
+          <div className="session-name">🇺🇸 New York</div>
+          <div className="session-stats">
+            <div>{sessions.NY} trades</div>
+            <div className="win-rate">
+              {sessions.NY > 0 ? ((sessions.NYWins / sessions.NY) * 100).toFixed(0) : 0}% win
+            </div>
+          </div>
+        </div>
+        <div className="session-card asia">
+          <div className="session-name">🌏 Asia</div>
+          <div className="session-stats">
+            <div>{sessions.Asia} trades</div>
+            <div className="win-rate">
+              {sessions.Asia > 0
+                ? ((sessions.AsiaWins / sessions.Asia) * 100).toFixed(0)
+                : 0}
+              % win
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -220,42 +351,70 @@ const Dashboard = ({ trades, user }) => {
     totalTrades: trades.length,
     wins: trades.filter((t) => t.outcome === 'win').length,
     losses: trades.filter((t) => t.outcome === 'loss').length,
-    winRate: trades.length > 0 ? ((trades.filter((t) => t.outcome === 'win').length / trades.length) * 100).toFixed(1) : 0,
-    totalPnL: trades.reduce((sum, t) => sum + ((t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity), 0),
+    winRate:
+      trades.length > 0
+        ? ((trades.filter((t) => t.outcome === 'win').length / trades.length) * 100).toFixed(1)
+        : 0,
+    totalPnL: trades.reduce(
+      (sum, t) =>
+        sum + (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity,
+      0
+    ),
+    avgRR:
+      trades.length > 0
+        ? (
+            trades.reduce((sum, t) => sum + Math.abs(t.exitPrice - t.entryPrice), 0) /
+            trades.length
+          ).toFixed(4)
+        : 0,
   };
+
+  const emotionalStats = trades.reduce(
+    (acc, t) => {
+      if (t.emotion) acc[t.emotion] = (acc[t.emotion] || 0) + 1;
+      return acc;
+    },
+    {}
+  );
 
   return (
     <div>
-      <h1>Dashboard</h1>
+      <h1>⚡ War Room Command Center</h1>
       <div className="welcome-banner">
-        Welcome back, <strong>{user.name}</strong>! 👋
+        Welcome, <strong>{user.name}</strong>! Your trading war room is live.
       </div>
-      <div className="stats">
-        <div className="stat-card">
+
+      <div className="stats-grid-large">
+        <div className="stat-card large">
+          <div className="stat-icon">📊</div>
           <div className="stat-label">Total Trades</div>
           <div className="stat-value">{stats.totalTrades}</div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card large success">
+          <div className="stat-icon">🎯</div>
           <div className="stat-label">Win Rate</div>
-          <div className="stat-value" style={{ color: stats.winRate >= 50 ? '#4ade80' : '#f87171' }}>
-            {stats.winRate}%
-          </div>
+          <div className="stat-value">{stats.winRate}%</div>
         </div>
-        <div className="stat-card">
-          <div className="stat-label">Wins / Losses</div>
-          <div className="stat-value">
-            <span style={{ color: '#4ade80' }}>{stats.wins}</span> / <span style={{ color: '#f87171' }}>{stats.losses}</span>
-          </div>
-        </div>
-        <div className="stat-card">
+        <div className="stat-card large">
+          <div className="stat-icon">💰</div>
           <div className="stat-label">Total P&L</div>
-          <div className="stat-value" style={{ color: stats.totalPnL >= 0 ? '#4ade80' : '#f87171' }}>
+          <div className="stat-value" style={{ color: stats.totalPnL >= 0 ? '#22c55e' : '#ef4444' }}>
             ${stats.totalPnL.toFixed(2)}
           </div>
         </div>
+        <div className="stat-card large">
+          <div className="stat-icon">⚖️</div>
+          <div className="stat-label">Avg R/R</div>
+          <div className="stat-value">{stats.avgRR}</div>
+        </div>
       </div>
 
-      <h2 style={{ marginTop: '2rem' }}>Recent Trades</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginTop: '2rem' }}>
+        <CalendarHeatmap trades={trades} />
+        <SessionBreakdown trades={trades} />
+      </div>
+
+      <h2 style={{ marginTop: '2rem' }}>📝 Recent Battles</h2>
       {trades.length > 0 ? (
         <table className="trade-table">
           <thead>
@@ -267,6 +426,8 @@ const Dashboard = ({ trades, user }) => {
               <th>Qty</th>
               <th>Outcome</th>
               <th>P&L</th>
+              <th>Emotion</th>
+              <th>Rating</th>
             </tr>
           </thead>
           <tbody>
@@ -282,14 +443,20 @@ const Dashboard = ({ trades, user }) => {
                   <td>
                     <span className={`badge badge-${t.outcome}`}>{t.outcome}</span>
                   </td>
-                  <td style={{ color: pnl >= 0 ? '#4ade80' : '#f87171' }}>${pnl.toFixed(2)}</td>
+                  <td style={{ color: pnl >= 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
+                    ${pnl.toFixed(2)}
+                  </td>
+                  <td>{t.emotion || '-'}</td>
+                  <td>{'⭐'.repeat(t.rating || 0)}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       ) : (
-        <p style={{ color: '#b0b8cc', marginTop: '1rem' }}>No trades logged yet. Start logging trades to see them here!</p>
+        <p style={{ color: '#b0b8cc', marginTop: '1rem' }}>
+          🚀 Begin your first trade! Click "Trade Log" to log a battle.
+        </p>
       )}
     </div>
   );
@@ -297,7 +464,6 @@ const Dashboard = ({ trades, user }) => {
 
 // ==================== TRADE LOG PAGE ====================
 const TradeLog = ({ trades, setTrades, showToast }) => {
-  const navigate = useNavigate();
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 16),
     pair: '',
@@ -307,9 +473,12 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
     direction: 'long',
     outcome: 'win',
     strategy: '',
+    emotion: 'calm',
+    rating: 0,
   });
   const [editingTrade, setEditingTrade] = useState(null);
   const [filters, setFilters] = useState({ pair: '', outcome: '', strategy: '' });
+  const [showPreCheck, setShowPreCheck] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -319,6 +488,7 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
         entryPrice: parseFloat(form.entryPrice),
         exitPrice: parseFloat(form.exitPrice),
         quantity: parseFloat(form.quantity),
+        rating: parseInt(form.rating),
       };
 
       if (editingTrade) {
@@ -327,7 +497,7 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
           body: JSON.stringify(payload),
         });
         setTrades(trades.map((t) => (t._id === editingTrade._id ? { ...t, ...payload } : t)));
-        showToast('Trade updated successfully!', 'success');
+        showToast('✓ Trade updated!', 'success');
         setEditingTrade(null);
       } else {
         const newTrade = await fetchWithAuth('/api/trades', {
@@ -335,7 +505,7 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
           body: JSON.stringify(payload),
         });
         setTrades([...trades, newTrade]);
-        showToast('Trade logged successfully!', 'success');
+        showToast('✓ Trade logged successfully!', 'success');
       }
 
       setForm({
@@ -347,18 +517,21 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
         direction: 'long',
         outcome: 'win',
         strategy: '',
+        emotion: 'calm',
+        rating: 0,
       });
+      setShowPreCheck(false);
     } catch (err) {
       showToast(err.message, 'error');
     }
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure?')) return;
+    if (!window.confirm('Confirm deletion?')) return;
     try {
       await fetchWithAuth(`/api/trades/${id}`, { method: 'DELETE' });
       setTrades(trades.filter((t) => t._id !== id));
-      showToast('Trade deleted', 'success');
+      showToast('✓ Trade deleted', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -372,7 +545,7 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
   });
 
   const exportCSV = () => {
-    const headers = ['Date', 'Pair', 'Direction', 'Entry Price', 'Exit Price', 'Quantity', 'Outcome', 'Strategy', 'P&L'];
+    const headers = ['Date', 'Pair', 'Direction', 'Entry', 'Exit', 'Qty', 'Outcome', 'Strategy', 'P&L', 'Emotion', 'Rating'];
     const rows = filteredTrades.map((t) => {
       const pnl = (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
       return [
@@ -385,6 +558,8 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
         t.outcome,
         t.strategy,
         pnl.toFixed(2),
+        t.emotion,
+        t.rating,
       ];
     });
     const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
@@ -393,12 +568,41 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
     a.href = URL.createObjectURL(blob);
     a.download = `trades_${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
-    showToast('CSV exported!', 'success');
+    showToast('✓ CSV exported!', 'success');
   };
 
   return (
     <div>
-      <h1>{editingTrade ? '✏️ Edit Trade' : '📝 Log New Trade'}</h1>
+      <h1>📝 Trade Log & Battle History</h1>
+
+      {showPreCheck && (
+        <div className="pre-check-modal">
+          <div className="modal-content">
+            <h2>⚠️ Pre-Trade Checklist</h2>
+            <div className="checklist-items">
+              <label>
+                <input type="checkbox" /> Risk/Reward ratio acceptable?
+              </label>
+              <label>
+                <input type="checkbox" /> Following trading plan?
+              </label>
+              <label>
+                <input type="checkbox" /> Position size appropriate?
+              </label>
+              <label>
+                <input type="checkbox" /> Emotional state clear?
+              </label>
+              <label>
+                <input type="checkbox" /> Market conditions analyzed?
+              </label>
+            </div>
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '10px' }}>
+              <button onClick={() => setShowPreCheck(false)}>✓ Proceed to Log</button>
+              <button onClick={() => setShowPreCheck(false)}>✕ Review Plan</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="filters">
         <select value={filters.pair} onChange={(e) => setFilters({ ...filters, pair: e.target.value })}>
@@ -432,7 +636,7 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
           required
         />
         <input
-          placeholder="Pair (e.g., EURUSD)"
+          placeholder="Pair (EURUSD)"
           value={form.pair}
           onChange={(e) => setForm({ ...form, pair: e.target.value.toUpperCase() })}
           required
@@ -471,11 +675,36 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
           <option>breakeven</option>
         </select>
         <input
-          placeholder="Strategy (optional)"
+          placeholder="Strategy"
           value={form.strategy}
           onChange={(e) => setForm({ ...form, strategy: e.target.value })}
         />
-        <button type="submit">{editingTrade ? '✏️ Update Trade' : '💾 Save Trade'}</button>
+        <select value={form.emotion} onChange={(e) => setForm({ ...form, emotion: e.target.value })}>
+          <option value="calm">😌 Calm</option>
+          <option value="confident">😎 Confident</option>
+          <option value="fearful">😨 Fearful</option>
+          <option value="fomo">🤑 FOMO</option>
+          <option value="frustrated">😤 Frustrated</option>
+        </select>
+        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+          <label>Rating:</label>
+          {[1, 2, 3, 4, 5].map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => setForm({ ...form, rating: r })}
+              style={{
+                background: form.rating >= r ? '#e8a020' : '#1a1f3a',
+                border: '1px solid #2a2e4a',
+                padding: '8px 12px',
+                cursor: 'pointer',
+              }}
+            >
+              ⭐
+            </button>
+          ))}
+        </div>
+        <button type="submit">{editingTrade ? '✏️ Update' : '💾 Save Trade'}</button>
         {editingTrade && <button type="button" onClick={() => setEditingTrade(null)}>Cancel</button>}
       </form>
 
@@ -491,6 +720,8 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
               <th>Qty</th>
               <th>Outcome</th>
               <th>P&L</th>
+              <th>Emotion</th>
+              <th>Rating</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -507,9 +738,11 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
                   <td>
                     <span className={`badge badge-${t.outcome}`}>{t.outcome}</span>
                   </td>
-                  <td style={{ color: pnl >= 0 ? '#4ade80' : '#f87171', fontWeight: 'bold' }}>
+                  <td style={{ color: pnl >= 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
                     ${pnl.toFixed(2)}
                   </td>
+                  <td>{t.emotion || '-'}</td>
+                  <td>{'⭐'.repeat(t.rating || 0) || '-'}</td>
                   <td>
                     <button
                       className="action-btn edit"
@@ -524,6 +757,8 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
                           direction: t.direction,
                           outcome: t.outcome,
                           strategy: t.strategy,
+                          emotion: t.emotion,
+                          rating: t.rating,
                         });
                       }}
                     >
@@ -539,7 +774,7 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
           </tbody>
         </table>
       ) : (
-        <p style={{ color: '#b0b8cc', marginTop: '1rem' }}>No trades found. Start logging some trades!</p>
+        <p style={{ color: '#b0b8cc' }}>No trades found.</p>
       )}
     </div>
   );
@@ -550,20 +785,37 @@ const Analytics = ({ trades }) => {
   const calculateStats = () => {
     const wins = trades.filter((t) => t.outcome === 'win');
     const losses = trades.filter((t) => t.outcome === 'loss');
-    const totalPnL = trades.reduce((sum, t) => sum + ((t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity), 0);
-    const avgWin = wins.length > 0 ? wins.reduce((sum, t) => sum + ((t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity), 0) / wins.length : 0;
-    const avgLoss = losses.length > 0 ? losses.reduce((sum, t) => sum + ((t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity), 0) / losses.length : 0;
+    const totalPnL = trades.reduce(
+      (sum, t) => sum + (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity,
+      0
+    );
+    const avgWin =
+      wins.length > 0
+        ? wins.reduce(
+            (sum, t) =>
+              sum + (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity,
+            0
+          ) / wins.length
+        : 0;
+    const avgLoss =
+      losses.length > 0
+        ? losses.reduce(
+            (sum, t) =>
+              sum + (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity,
+            0
+          ) / losses.length
+        : 0;
     const profitFactor = Math.abs(avgLoss) > 0 ? Math.abs(avgWin / avgLoss) : 0;
 
     return { totalPnL, avgWin, avgLoss, profitFactor, wins: wins.length, losses: losses.length };
   };
 
   const stats = calculateStats();
-
   const pairStats = {};
   trades.forEach((t) => {
     if (!pairStats[t.pair]) pairStats[t.pair] = { total: 0, count: 0 };
-    pairStats[t.pair].total += (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
+    pairStats[t.pair].total +=
+      (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
     pairStats[t.pair].count += 1;
   });
 
@@ -571,40 +823,60 @@ const Analytics = ({ trades }) => {
   trades.forEach((t) => {
     const strat = t.strategy || 'Unknown';
     if (!strategyStats[strat]) strategyStats[strat] = { total: 0, count: 0 };
-    strategyStats[strat].total += (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
+    strategyStats[strat].total +=
+      (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
     strategyStats[strat].count += 1;
+  });
+
+  // Drawdown calculation
+  let maxEquity = 1000;
+  let maxDrawdown = 0;
+  let currentEquity = 1000;
+  trades.forEach((t) => {
+    const pnl = (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
+    currentEquity += pnl;
+    if (currentEquity > maxEquity) maxEquity = currentEquity;
+    const drawdown = ((maxEquity - currentEquity) / maxEquity) * 100;
+    if (drawdown > maxDrawdown) maxDrawdown = drawdown;
   });
 
   return (
     <div>
-      <h1>📊 Analytics</h1>
+      <h1>📊 Advanced Analytics</h1>
 
-      <div className="stats">
-        <div className="stat-card">
+      <div className="stats-grid-large">
+        <div className="stat-card large">
+          <div className="stat-icon">💰</div>
           <div className="stat-label">Total P&L</div>
-          <div className="stat-value" style={{ color: stats.totalPnL >= 0 ? '#4ade80' : '#f87171' }}>
+          <div
+            className="stat-value"
+            style={{ color: stats.totalPnL >= 0 ? '#22c55e' : '#ef4444' }}
+          >
             ${stats.totalPnL.toFixed(2)}
           </div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card large">
+          <div className="stat-icon">📈</div>
           <div className="stat-label">Avg Win</div>
-          <div className="stat-value" style={{ color: '#4ade80' }}>
+          <div className="stat-value" style={{ color: '#22c55e' }}>
             ${stats.avgWin.toFixed(2)}
           </div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card large">
+          <div className="stat-icon">📉</div>
           <div className="stat-label">Avg Loss</div>
-          <div className="stat-value" style={{ color: '#f87171' }}>
+          <div className="stat-value" style={{ color: '#ef4444' }}>
             ${stats.avgLoss.toFixed(2)}
           </div>
         </div>
-        <div className="stat-card">
+        <div className="stat-card large">
+          <div className="stat-icon">⚖️</div>
           <div className="stat-label">Profit Factor</div>
           <div className="stat-value">{stats.profitFactor.toFixed(2)}</div>
         </div>
       </div>
 
-      <div style={{ marginTop: '2rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+      <div style={{ marginTop: '2rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
         <div>
           <h2>Pair Performance</h2>
           <table className="trade-table">
@@ -620,7 +892,7 @@ const Analytics = ({ trades }) => {
                 <tr key={pair}>
                   <td>{pair}</td>
                   <td>{data.count}</td>
-                  <td style={{ color: data.total >= 0 ? '#4ade80' : '#f87171', fontWeight: 'bold' }}>
+                  <td style={{ color: data.total >= 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
                     ${data.total.toFixed(2)}
                   </td>
                 </tr>
@@ -644,7 +916,7 @@ const Analytics = ({ trades }) => {
                 <tr key={strategy}>
                   <td>{strategy}</td>
                   <td>{data.count}</td>
-                  <td style={{ color: data.total >= 0 ? '#4ade80' : '#f87171', fontWeight: 'bold' }}>
+                  <td style={{ color: data.total >= 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
                     ${data.total.toFixed(2)}
                   </td>
                 </tr>
@@ -653,11 +925,29 @@ const Analytics = ({ trades }) => {
           </table>
         </div>
       </div>
+
+      <div style={{ marginTop: '2rem', background: '#1a1f3a', padding: '1rem', borderRadius: '8px' }}>
+        <h3>Maximum Drawdown: {maxDrawdown.toFixed(2)}%</h3>
+        <p style={{ color: '#b0b8cc', marginTop: '0.5rem' }}>
+          Largest peak-to-trough decline in your trading account
+        </p>
+      </div>
     </div>
   );
 };
 
-// ==================== BACKTESTING PAGE ====================
+// ==================== CALENDAR PAGE ====================
+const Calendar = ({ trades }) => {
+  return (
+    <div>
+      <h1>📅 Trading Calendar & Heatmap</h1>
+      <CalendarHeatmap trades={trades} />
+      <SessionBreakdown trades={trades} />
+    </div>
+  );
+};
+
+// ==================== BACKTEST PAGE ====================
 const Backtest = ({ trades }) => {
   const [simulations, setSimulations] = useState(100);
   const [selectedStrategy, setSelectedStrategy] = useState('');
@@ -677,7 +967,10 @@ const Backtest = ({ trades }) => {
       let equity = 1000;
       for (let i = 0; i < filteredTrades.length; i++) {
         const randomTrade = filteredTrades[Math.floor(Math.random() * filteredTrades.length)];
-        const pnl = (randomTrade.exitPrice - randomTrade.entryPrice) * (randomTrade.direction === 'long' ? 1 : -1) * randomTrade.quantity;
+        const pnl =
+          (randomTrade.exitPrice - randomTrade.entryPrice) *
+          (randomTrade.direction === 'long' ? 1 : -1) *
+          randomTrade.quantity;
         equity += pnl;
       }
       paths.push(equity);
@@ -690,12 +983,12 @@ const Backtest = ({ trades }) => {
     const profitableCount = paths.filter((p) => p > 1000).length;
 
     alert(`
-Monte Carlo Backtesting Results (${simulations} simulations)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Median: $${median.toFixed(0)}
-Pessimistic (10th %): $${p10.toFixed(0)}
-Optimistic (90th %): $${p90.toFixed(0)}
-Profitable: ${((profitableCount / simulations) * 100).toFixed(1)}%
+🧪 Monte Carlo Backtest Results (${simulations} simulations)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Median Outcome: $${median.toFixed(0)}
+Pessimistic (10th %ile): $${p10.toFixed(0)}
+Optimistic (90th %ile): $${p90.toFixed(0)}
+Profitable Simulations: ${((profitableCount / simulations) * 100).toFixed(1)}%
     `);
   };
 
@@ -704,7 +997,7 @@ Profitable: ${((profitableCount / simulations) * 100).toFixed(1)}%
   return (
     <div>
       <h1>🧪 Monte Carlo Backtesting</h1>
-      <div style={{ background: '#1a1f3a', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
+      <div style={{ background: '#1a1f3a', padding: '1.5rem', borderRadius: '8px', marginBottom: '1rem' }}>
         <label>
           Simulations:
           <input
@@ -726,12 +1019,62 @@ Profitable: ${((profitableCount / simulations) * 100).toFixed(1)}%
           </select>
         </label>
         <button onClick={runBacktest} style={{ marginLeft: '1rem' }}>
-          Run Backtest
+          ▶️ Run Backtest
         </button>
       </div>
-      <p style={{ color: '#b0b8cc' }}>
-        Monte Carlo backtesting simulates {simulations} random paths through your trade history to estimate future performance distributions.
-      </p>
+    </div>
+  );
+};
+
+// ==================== CHECKLIST PAGE ====================
+const Checklist = ({ user, showToast }) => {
+  const [checklist, setChecklist] = useState(user?.tradingChecklist || '');
+
+  const save = async () => {
+    try {
+      await fetchWithAuth('/api/user/profile', {
+        method: 'PUT',
+        body: JSON.stringify({ tradingChecklist: checklist }),
+      });
+      showToast('✓ Checklist saved!', 'success');
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  return (
+    <div>
+      <h1>✅ Pre-Trade Checklist</h1>
+      <div style={{ marginBottom: '1rem', color: '#b0b8cc' }}>
+        Create your pre-trade checklist to ensure consistency and discipline
+      </div>
+      <textarea
+        value={checklist}
+        onChange={(e) => setChecklist(e.target.value)}
+        rows={15}
+        placeholder="☐ Risk/Reward ratio?
+☐ Trading plan confirmation?
+☐ Position size aligned?
+☐ Emotional clarity?
+☐ Market analysis complete?
+☐ Entry point valid?
+☐ Exit strategy set?
+☐ Time frame correct?
+"
+        style={{
+          width: '100%',
+          background: '#1a1f3a',
+          border: '1px solid #2a2e4a',
+          color: 'white',
+          padding: '1rem',
+          borderRadius: '8px',
+          fontFamily: 'monospace',
+          fontSize: '0.9rem',
+        }}
+      />
+      <button onClick={save} style={{ marginTop: '1rem' }}>
+        💾 Save Checklist
+      </button>
     </div>
   );
 };
@@ -746,7 +1089,7 @@ const Rules = ({ user, showToast }) => {
         method: 'PUT',
         body: JSON.stringify({ tradingRules: rules }),
       });
-      showToast('Trading rules saved!', 'success');
+      showToast('✓ Rules saved!', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -754,15 +1097,20 @@ const Rules = ({ user, showToast }) => {
 
   return (
     <div>
-      <h1>📖 Trading Rules</h1>
+      <h1>📖 Trading Rules & Playbook</h1>
       <div style={{ marginBottom: '1rem', color: '#b0b8cc' }}>
-        Document your trading rules, entry criteria, and risk management guidelines here.
+        Document your edge, setups, and risk rules
       </div>
       <textarea
         value={rules}
         onChange={(e) => setRules(e.target.value)}
         rows={15}
-        placeholder="Enter your trading rules here..."
+        placeholder="RULE 1: Never risk more than 2% per trade
+RULE 2: Always use stop loss
+RULE 3: Follow the trend
+RULE 4: Scale in on winners
+RULE 5: Cut losses at -50 pips
+..."
         style={{
           width: '100%',
           background: '#1a1f3a',
@@ -793,7 +1141,7 @@ const Profile = ({ user, showToast }) => {
         method: 'PUT',
         body: JSON.stringify({ name }),
       });
-      showToast('Profile updated!', 'success');
+      showToast('✓ Profile updated!', 'success');
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -805,7 +1153,7 @@ const Profile = ({ user, showToast }) => {
         method: 'POST',
         body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }),
       });
-      showToast('Password changed!', 'success');
+      showToast('✓ Password changed!', 'success');
       setOldPwd('');
       setNewPwd('');
     } catch (err) {
@@ -815,12 +1163,12 @@ const Profile = ({ user, showToast }) => {
 
   return (
     <div>
-      <h1>👤 Profile Settings</h1>
+      <h1>👤 War Room Profile</h1>
 
       <div style={{ background: '#1a1f3a', padding: '1.5rem', borderRadius: '8px', marginBottom: '1rem', maxWidth: '500px' }}>
         <h2>Account Information</h2>
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.5rem' }}>Name</label>
+          <label style={{ display: 'block', marginBottom: '0.5rem' }}>Trader Name</label>
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <button onClick={updateProfile}>Update Name</button>
@@ -832,7 +1180,7 @@ const Profile = ({ user, showToast }) => {
           <label style={{ display: 'block', marginBottom: '0.5rem' }}>Current Password</label>
           <input
             type="password"
-            placeholder="Enter current password"
+            placeholder="••••••••"
             value={oldPwd}
             onChange={(e) => setOldPwd(e.target.value)}
           />
@@ -841,7 +1189,7 @@ const Profile = ({ user, showToast }) => {
           <label style={{ display: 'block', marginBottom: '0.5rem' }}>New Password</label>
           <input
             type="password"
-            placeholder="Enter new password"
+            placeholder="••••••••"
             value={newPwd}
             onChange={(e) => setNewPwd(e.target.value)}
           />
@@ -861,7 +1209,6 @@ const DashboardApp = () => {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
-  // Load user and trades on mount
   useEffect(() => {
     const loadData = async () => {
       const token = getAuthToken();
@@ -873,7 +1220,6 @@ const DashboardApp = () => {
       try {
         const userData = await fetchWithAuth('/api/auth/me');
         setUser(userData);
-
         const tradesData = await fetchWithAuth('/api/trades');
         setTrades(tradesData || []);
       } catch (err) {
@@ -894,16 +1240,14 @@ const DashboardApp = () => {
   if (loading) {
     return (
       <div className="loading">
-        <div>Loading your trading dashboard...</div>
+        <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⚡</div>
+        <div>Initializing War Room...</div>
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
-  // Don't show sidebar on login/signup pages
   const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
 
   return (
@@ -932,7 +1276,9 @@ const DashboardApp = () => {
             <Route path="/" element={<Dashboard trades={trades} user={user} />} />
             <Route path="/trades" element={<TradeLog trades={trades} setTrades={setTrades} showToast={showToast} />} />
             <Route path="/analytics" element={<Analytics trades={trades} />} />
+            <Route path="/calendar" element={<Calendar trades={trades} />} />
             <Route path="/backtest" element={<Backtest trades={trades} />} />
+            <Route path="/checklist" element={<Checklist user={user} showToast={showToast} />} />
             <Route path="/rules" element={<Rules user={user} showToast={showToast} />} />
             <Route path="/profile" element={<Profile user={user} showToast={showToast} />} />
             <Route path="*" element={<Dashboard trades={trades} user={user} />} />
@@ -941,13 +1287,12 @@ const DashboardApp = () => {
       </div>
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
       <GlobalStyle />
     </div>
   );
 };
 
-// ==================== MAIN APP WITH ROUTES ====================
+// ==================== MAIN APP ====================
 const App = () => {
   return (
     <Routes>
@@ -958,7 +1303,7 @@ const App = () => {
   );
 };
 
-// ==================== GLOBAL STYLES ====================
+// ==================== GLOBAL STYLES - WAR ROOM AESTHETIC ====================
 const GlobalStyle = () => (
   <style>{`
     * {
@@ -973,9 +1318,10 @@ const GlobalStyle = () => (
     }
 
     body {
-      background: #0a0c15;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #0a0c15 0%, #0f1222 100%);
+      font-family: 'Segoe UI', 'Roboto', sans-serif;
       color: #e0e4f0;
+      line-height: 1.6;
     }
 
     /* ===== AUTH PAGES ===== */
@@ -984,97 +1330,136 @@ const GlobalStyle = () => (
       justify-content: center;
       align-items: center;
       min-height: 100vh;
-      background: radial-gradient(circle at 20% 30%, #0f1222, #05070c);
+      background: radial-gradient(ellipse at 20% 30%, #1a1f3a, #05070c);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .auth-container::before {
+      content: '';
+      position: absolute;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(232,160,32,0.1) 1px, transparent 1px);
+      background-size: 50px 50px;
+      animation: gridShift 20s linear infinite;
+    }
+
+    @keyframes gridShift {
+      0% { transform: translate(0, 0); }
+      100% { transform: translate(50px, 50px); }
     }
 
     .auth-card {
-      background: rgba(26, 31, 58, 0.9);
-      backdrop-filter: blur(12px);
-      padding: 2.5rem;
-      border-radius: 24px;
+      background: rgba(26, 31, 58, 0.95);
+      backdrop-filter: blur(16px);
+      padding: 3rem 2.5rem;
+      border-radius: 20px;
       width: 100%;
-      max-width: 420px;
+      max-width: 450px;
       text-align: center;
-      border: 1px solid rgba(232, 160, 32, 0.3);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+      border: 2px solid rgba(232, 160, 32, 0.4);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      position: relative;
+      z-index: 10;
+      animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
 
     .auth-logo {
-      font-size: 1.8rem;
+      font-size: 2rem;
       font-weight: bold;
       color: #e8a020;
       margin-bottom: 1.5rem;
       letter-spacing: -0.5px;
+      text-shadow: 0 0 20px rgba(232, 160, 32, 0.5);
     }
 
     .auth-card h2 {
-      font-size: 1.1rem;
+      font-size: 1.2rem;
       margin-bottom: 1.5rem;
       color: #b0b8cc;
-      font-weight: 500;
+      font-weight: 400;
+      letter-spacing: 1px;
+      text-transform: uppercase;
     }
 
     .error-box {
-      background: rgba(248, 113, 113, 0.1);
-      border-left: 3px solid #f87171;
-      padding: 0.75rem;
+      background: rgba(248, 113, 113, 0.15);
+      border-left: 4px solid #ef4444;
+      padding: 0.875rem;
       border-radius: 6px;
       color: #f87171;
       margin-bottom: 1rem;
       font-size: 0.9rem;
+      backdrop-filter: blur(8px);
     }
 
     .auth-card form {
       display: flex;
       flex-direction: column;
-      gap: 0.75rem;
+      gap: 0.875rem;
     }
 
     .auth-card input {
       width: 100%;
-      padding: 10px 12px;
-      background: #0f1222;
-      border: 1px solid #2a2e4a;
+      padding: 11px 14px;
+      background: rgba(15, 18, 34, 0.8);
+      border: 1px solid rgba(232, 160, 32, 0.25);
       border-radius: 8px;
       color: white;
-      font-size: 0.9rem;
-      transition: 0.2s;
+      font-size: 0.95rem;
+      transition: all 0.2s;
     }
 
     .auth-card input:focus {
       outline: none;
       border-color: #e8a020;
-      box-shadow: 0 0 0 3px rgba(232, 160, 32, 0.1);
+      box-shadow: 0 0 0 3px rgba(232, 160, 32, 0.15);
+      background: rgba(15, 18, 34, 0.95);
     }
 
     .auth-card button {
       width: 100%;
-      padding: 10px;
-      background: #e8a020;
+      padding: 11px;
+      background: linear-gradient(135deg, #e8a020, #d98810);
       border: none;
       border-radius: 8px;
       color: #0a0c15;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
-      transition: 0.2s;
+      transition: all 0.2s;
       font-size: 0.95rem;
       margin-top: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 15px rgba(232, 160, 32, 0.3);
     }
 
     .auth-card button:hover:not(:disabled) {
-      background: #f0a835;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(232, 160, 32, 0.3);
+      background: linear-gradient(135deg, #f0a835, #e89810);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(232, 160, 32, 0.4);
     }
 
     .auth-card button:disabled {
-      opacity: 0.7;
+      opacity: 0.6;
       cursor: not-allowed;
     }
 
     .auth-card p {
-      margin-top: 1rem;
-      color: #b0b8cc;
+      margin-top: 1.2rem;
+      color: #9ca3af;
       font-size: 0.9rem;
     }
 
@@ -1087,6 +1472,7 @@ const GlobalStyle = () => (
 
     .auth-card a:hover {
       color: #f0a835;
+      text-shadow: 0 0 10px rgba(232, 160, 32, 0.5);
     }
 
     /* ===== PROTECTED APP ===== */
@@ -1098,79 +1484,121 @@ const GlobalStyle = () => (
 
     /* ===== SIDEBAR ===== */
     .sidebar {
-      width: 260px;
-      background: rgba(8, 12, 22, 0.95);
-      backdrop-filter: blur(12px);
-      border-right: 1px solid rgba(232, 160, 32, 0.2);
+      width: 280px;
+      background: linear-gradient(180deg, rgba(8,12,22,0.98) 0%, rgba(15,18,34,0.95) 100%);
+      backdrop-filter: blur(16px);
+      border-right: 1px solid rgba(232, 160, 32, 0.15);
       padding: 1.5rem;
       position: fixed;
       height: 100vh;
       overflow-y: auto;
       z-index: 100;
+      box-shadow: 8px 0 30px rgba(0, 0, 0, 0.5);
     }
 
     .logo {
-      font-size: 1.3rem;
-      font-weight: bold;
-      color: #e8a020;
-      margin-bottom: 2rem;
       display: flex;
-      gap: 0.5rem;
+      align-items: center;
+      gap: 0.8rem;
+      margin-bottom: 2.5rem;
+      padding: 0.8rem;
+      background: rgba(232, 160, 32, 0.1);
+      border-radius: 10px;
+      border: 1px solid rgba(232, 160, 32, 0.2);
     }
 
-    .logo span {
-      color: #b0b8cc;
+    .logo-glow {
+      font-size: 1.6rem;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .logo-title {
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #e8a020;
+      letter-spacing: 1px;
+    }
+
+    .logo-subtitle {
+      font-size: 0.65rem;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 1px;
     }
 
     .sidebar-section {
-      margin-bottom: 1.5rem;
+      margin-bottom: 2rem;
     }
 
     .section-label {
       font-size: 0.65rem;
       text-transform: uppercase;
       color: #7c85a0;
-      margin-bottom: 0.7rem;
-      letter-spacing: 1px;
-      font-weight: 600;
+      margin-bottom: 0.8rem;
+      letter-spacing: 1.2px;
+      font-weight: 700;
     }
 
     .sidebar-item {
-      display: block;
-      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      padding: 0.7rem 1rem;
       margin: 4px 0;
       border-radius: 8px;
       color: #b8c0dc;
       text-decoration: none;
-      transition: 0.2s;
+      transition: all 0.2s;
       font-size: 0.9rem;
       border-left: 2px solid transparent;
     }
 
     .sidebar-item.active {
-      background: rgba(232, 160, 32, 0.15);
+      background: rgba(232, 160, 32, 0.2);
       color: #e8a020;
       border-left-color: #e8a020;
-      font-weight: 500;
+      font-weight: 600;
+      box-shadow: inset 4px 0 0 rgba(232, 160, 32, 0.3);
     }
 
     .sidebar-item:hover {
-      background: rgba(232, 160, 32, 0.1);
+      background: rgba(232, 160, 32, 0.12);
       color: white;
+      transform: translateX(4px);
+    }
+
+    .item-icon {
+      font-size: 1.1rem;
+    }
+
+    .item-label {
+      flex: 1;
     }
 
     .upgrade-card {
-      background: linear-gradient(135deg, rgba(232, 160, 32, 0.15), rgba(200, 100, 20, 0.05));
+      background: linear-gradient(135deg, rgba(232, 160, 32, 0.2), rgba(200, 100, 20, 0.08));
       border-radius: 12px;
-      padding: 1rem;
+      padding: 1.2rem;
       text-align: center;
-      margin: 1.5rem 0;
-      border: 1px solid rgba(232, 160, 32, 0.4);
+      margin: 2rem 0;
+      border: 1px solid rgba(232, 160, 32, 0.3);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
 
     .upgrade-icon {
       font-size: 1.8rem;
       margin-bottom: 0.5rem;
+      animation: bounce 2s ease-in-out infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
     }
 
     .upgrade-title {
@@ -1178,6 +1606,8 @@ const GlobalStyle = () => (
       color: #e8a020;
       font-size: 0.9rem;
       margin-bottom: 0.3rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .upgrade-desc {
@@ -1187,42 +1617,49 @@ const GlobalStyle = () => (
     }
 
     .upgrade-btn {
-      background: #e8a020;
+      background: linear-gradient(135deg, #e8a020, #d98810);
       border: none;
       padding: 6px 12px;
       border-radius: 20px;
       cursor: pointer;
       width: 100%;
       color: #0a0c15;
-      font-weight: 600;
+      font-weight: 700;
       font-size: 0.8rem;
-      transition: 0.2s;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
     .upgrade-btn:hover {
-      background: #f0a835;
+      background: linear-gradient(135deg, #f0a835, #e89810);
+      transform: scale(1.05);
     }
 
     .logout-btn {
       width: 100%;
       background: rgba(248, 113, 113, 0.15);
-      border: 1px solid rgba(248, 113, 113, 0.5);
+      border: 1px solid rgba(248, 113, 113, 0.4);
       color: #f87171;
       padding: 10px;
       border-radius: 8px;
       cursor: pointer;
-      margin-top: 1rem;
-      font-weight: 600;
-      transition: 0.2s;
+      margin-top: 2rem;
+      font-weight: 700;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-size: 0.85rem;
     }
 
     .logout-btn:hover {
       background: rgba(248, 113, 113, 0.25);
+      border-color: #f87171;
     }
 
     /* ===== MAIN AREA ===== */
     .main-area {
-      margin-left: 260px;
+      margin-left: 280px;
       flex: 1;
       display: flex;
       flex-direction: column;
@@ -1232,15 +1669,17 @@ const GlobalStyle = () => (
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 1rem 2rem;
-      background: rgba(8, 12, 22, 0.6);
+      padding: 1.2rem 2rem;
+      background: rgba(8, 12, 22, 0.7);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid rgba(232, 160, 32, 0.1);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     }
 
     .date-time {
       font-size: 0.85rem;
       color: #b0b8cc;
+      font-weight: 500;
     }
 
     .user-info {
@@ -1250,8 +1689,8 @@ const GlobalStyle = () => (
     }
 
     .user-avatar {
-      width: 36px;
-      height: 36px;
+      width: 40px;
+      height: 40px;
       background: linear-gradient(135deg, #e8a020, #d98810);
       border-radius: 50%;
       display: flex;
@@ -1259,7 +1698,8 @@ const GlobalStyle = () => (
       justify-content: center;
       color: #0a0c15;
       font-weight: bold;
-      font-size: 1rem;
+      font-size: 1.1rem;
+      box-shadow: 0 4px 12px rgba(232, 160, 32, 0.3);
     }
 
     .page-content {
@@ -1269,9 +1709,10 @@ const GlobalStyle = () => (
     }
 
     .page-content h1 {
-      font-size: 1.8rem;
+      font-size: 2rem;
       margin-bottom: 0.5rem;
       color: #ffffff;
+      font-weight: 700;
     }
 
     .page-content h2 {
@@ -1279,38 +1720,63 @@ const GlobalStyle = () => (
       margin-bottom: 1rem;
       margin-top: 1.5rem;
       color: #e0e4f0;
+      font-weight: 600;
+    }
+
+    .page-content h3 {
+      font-size: 1.1rem;
+      color: #e8a020;
+      margin-bottom: 0.8rem;
+      font-weight: 600;
     }
 
     /* ===== WELCOME BANNER ===== */
     .welcome-banner {
-      background: rgba(232, 160, 32, 0.15);
-      border-left: 3px solid #e8a020;
-      padding: 1rem;
+      background: linear-gradient(135deg, rgba(232, 160, 32, 0.2), rgba(232, 160, 32, 0.05));
+      border-left: 4px solid #e8a020;
+      padding: 1.2rem;
       border-radius: 8px;
       color: #e0e4f0;
-      margin-bottom: 1.5rem;
+      margin-bottom: 2rem;
+      border: 1px solid rgba(232, 160, 32, 0.2);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
 
     /* ===== STATS ===== */
-    .stats {
+    .stats-grid-large {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 1rem;
-      margin: 1.5rem 0;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.5rem;
+      margin: 2rem 0;
     }
 
     .stat-card {
-      background: linear-gradient(135deg, #1a1f3a 0%, #151a33 100%);
+      background: linear-gradient(135deg, rgba(26, 31, 58, 0.8), rgba(26, 31, 58, 0.4));
       padding: 1.5rem;
       border-radius: 12px;
-      border: 1px solid rgba(232, 160, 32, 0.2);
+      border: 1px solid rgba(232, 160, 32, 0.15);
       text-align: center;
-      transition: 0.2s;
+      transition: all 0.3s;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
 
     .stat-card:hover {
       border-color: rgba(232, 160, 32, 0.4);
-      transform: translateY(-2px);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(232, 160, 32, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .stat-card.large {
+      padding: 2rem;
+    }
+
+    .stat-card.success {
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+
+    .stat-icon {
+      font-size: 2rem;
+      margin-bottom: 0.5rem;
     }
 
     .stat-label {
@@ -1323,45 +1789,157 @@ const GlobalStyle = () => (
     }
 
     .stat-value {
-      font-size: 1.8rem;
+      font-size: 2rem;
       font-weight: bold;
       color: #e8a020;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ===== HEATMAP ===== */
+    .heatmap {
+      background: #1a1f3a;
+      padding: 1.5rem;
+      border-radius: 12px;
+      border: 1px solid rgba(232, 160, 32, 0.1);
+    }
+
+    .heatmap h3 {
+      margin-bottom: 1rem;
+    }
+
+    .heatmap-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      margin-bottom: 1rem;
+    }
+
+    .heatmap-cell {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid rgba(232, 160, 32, 0.1);
+    }
+
+    .heatmap-cell:hover {
+      transform: scale(1.1);
+      box-shadow: 0 4px 12px rgba(232, 160, 32, 0.3);
+    }
+
+    .heatmap-legend {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      font-size: 0.8rem;
+    }
+
+    .heatmap-legend > div {
+      padding: 0.4rem 0.8rem;
+      border-radius: 4px;
+      color: white;
+      font-weight: 600;
+    }
+
+    /* ===== SESSION BREAKDOWN ===== */
+    .session-breakdown {
+      background: #1a1f3a;
+      padding: 1.5rem;
+      border-radius: 12px;
+      border: 1px solid rgba(232, 160, 32, 0.1);
+    }
+
+    .session-breakdown h3 {
+      margin-bottom: 1.5rem;
+    }
+
+    .session-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+
+    .session-card {
+      padding: 1.5rem;
+      border-radius: 10px;
+      border: 1px solid rgba(232, 160, 32, 0.2);
+      text-align: center;
+      background: rgba(26, 31, 58, 0.6);
+      transition: all 0.2s;
+    }
+
+    .session-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .session-card.london {
+      border-color: rgba(59, 130, 246, 0.3);
+    }
+
+    .session-card.ny {
+      border-color: rgba(168, 85, 247, 0.3);
+    }
+
+    .session-card.asia {
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+
+    .session-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.8rem;
+      color: #e8a020;
+    }
+
+    .session-stats {
+      color: #b0b8cc;
+      font-size: 0.9rem;
+    }
+
+    .win-rate {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #22c55e;
+      margin-top: 0.3rem;
     }
 
     /* ===== TABLES ===== */
     .trade-table {
       width: 100%;
       border-collapse: collapse;
-      background: #1a1f3a;
+      background: rgba(26, 31, 58, 0.7);
       border-radius: 12px;
       overflow: hidden;
       margin-top: 1rem;
       border: 1px solid rgba(232, 160, 32, 0.1);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     }
 
     .trade-table thead {
-      background: rgba(8, 12, 22, 0.6);
+      background: rgba(8, 12, 22, 0.8);
+      border-bottom: 2px solid rgba(232, 160, 32, 0.2);
     }
 
     .trade-table th {
       padding: 12px 16px;
       text-align: left;
       font-size: 0.8rem;
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
       color: #9ca3af;
       letter-spacing: 0.5px;
-      border-bottom: 1px solid rgba(232, 160, 32, 0.2);
     }
 
     .trade-table td {
       padding: 12px 16px;
-      border-bottom: 1px solid rgba(232, 160, 32, 0.1);
+      border-bottom: 1px solid rgba(232, 160, 32, 0.08);
       color: #e0e4f0;
+      font-size: 0.9rem;
     }
 
     .trade-table tr:nth-child(even) {
-      background: rgba(26, 31, 58, 0.6);
+      background: rgba(26, 31, 58, 0.4);
     }
 
     .trade-table tr:hover {
@@ -1373,25 +1951,29 @@ const GlobalStyle = () => (
       display: inline-block;
       padding: 4px 8px;
       border-radius: 4px;
-      font-size: 0.75rem;
-      font-weight: 600;
+      font-size: 0.7rem;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      border: 1px solid;
     }
 
     .badge-win {
-      background: rgba(74, 222, 128, 0.15);
-      color: #4ade80;
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+      border-color: rgba(34, 197, 94, 0.3);
     }
 
     .badge-loss {
-      background: rgba(248, 113, 113, 0.15);
-      color: #f87171;
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.3);
     }
 
     .badge-breakeven {
-      background: rgba(191, 144, 0, 0.15);
+      background: rgba(251, 191, 36, 0.15);
       color: #fbbf24;
+      border-color: rgba(251, 191, 36, 0.3);
     }
 
     /* ===== FILTERS ===== */
@@ -1405,35 +1987,37 @@ const GlobalStyle = () => (
     .filters select,
     .filters button {
       padding: 8px 12px;
-      background: #1a1f3a;
+      background: rgba(26, 31, 58, 0.8);
       border: 1px solid rgba(232, 160, 32, 0.2);
       border-radius: 8px;
       color: white;
       font-size: 0.9rem;
       cursor: pointer;
-      transition: 0.2s;
+      transition: all 0.2s;
+      font-weight: 500;
     }
 
     .filters select:hover,
     .filters button:hover {
       border-color: #e8a020;
-      background: rgba(232, 160, 32, 0.05);
+      background: rgba(232, 160, 32, 0.08);
     }
 
     .filters button {
-      background: #e8a020;
+      background: linear-gradient(135deg, #e8a020, #d98810);
       color: #0a0c15;
-      font-weight: 600;
+      font-weight: 700;
       border: none;
     }
 
     .filters button:hover {
-      background: #f0a835;
+      background: linear-gradient(135deg, #f0a835, #e89810);
+      box-shadow: 0 4px 12px rgba(232, 160, 32, 0.3);
     }
 
     /* ===== FORMS ===== */
     form {
-      background: #1a1f3a;
+      background: linear-gradient(135deg, rgba(26, 31, 58, 0.7), rgba(26, 31, 58, 0.4));
       padding: 1.5rem;
       border-radius: 12px;
       margin-bottom: 1.5rem;
@@ -1441,19 +2025,20 @@ const GlobalStyle = () => (
       flex-wrap: wrap;
       gap: 10px;
       align-items: flex-end;
-      border: 1px solid rgba(232, 160, 32, 0.1);
+      border: 1px solid rgba(232, 160, 32, 0.15);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
     }
 
     input,
     select,
     textarea {
-      background: #0f1222;
+      background: rgba(15, 18, 34, 0.8);
       border: 1px solid rgba(232, 160, 32, 0.2);
       padding: 10px 12px;
       border-radius: 8px;
       color: white;
       font-size: 0.9rem;
-      transition: 0.2s;
+      transition: all 0.2s;
       font-family: inherit;
     }
 
@@ -1462,7 +2047,8 @@ const GlobalStyle = () => (
     textarea:focus {
       outline: none;
       border-color: #e8a020;
-      box-shadow: 0 0 0 3px rgba(232, 160, 32, 0.1);
+      box-shadow: 0 0 0 3px rgba(232, 160, 32, 0.15);
+      background: rgba(15, 18, 34, 0.95);
     }
 
     input,
@@ -1478,22 +2064,25 @@ const GlobalStyle = () => (
     }
 
     button {
-      background: #e8a020;
+      background: linear-gradient(135deg, #e8a020, #d98810);
       border: none;
       padding: 10px 20px;
       border-radius: 8px;
       color: #0a0c15;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
-      transition: 0.2s;
+      transition: all 0.2s;
       font-size: 0.9rem;
       white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 12px rgba(232, 160, 32, 0.3);
     }
 
     button:hover {
-      background: #f0a835;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(232, 160, 32, 0.3);
+      background: linear-gradient(135deg, #f0a835, #e89810);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(232, 160, 32, 0.4);
     }
 
     button:active {
@@ -1510,12 +2099,14 @@ const GlobalStyle = () => (
       background: rgba(232, 160, 32, 0.2);
       color: #e8a020;
       border: 1px solid rgba(232, 160, 32, 0.4);
+      box-shadow: none;
     }
 
     .action-btn.delete {
-      background: rgba(248, 113, 113, 0.2);
-      color: #f87171;
-      border: 1px solid rgba(248, 113, 113, 0.4);
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      box-shadow: none;
     }
 
     /* ===== TOAST NOTIFICATIONS ===== */
@@ -1523,24 +2114,29 @@ const GlobalStyle = () => (
       position: fixed;
       bottom: 20px;
       right: 20px;
-      background: #1a1f3a;
+      background: rgba(26, 31, 58, 0.95);
+      backdrop-filter: blur(8px);
       border-left: 4px solid #e8a020;
       padding: 12px 20px;
       border-radius: 8px;
       z-index: 2000;
       animation: slideIn 0.3s ease-out;
-      color: #e0e4f0;
-      font-weight: 500;
+      color: #e8a020;
+      font-weight: 600;
+      border: 1px solid rgba(232, 160, 32, 0.2);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
     }
 
     .toast.error {
-      border-left-color: #f87171;
-      color: #f87171;
+      border-left-color: #ef4444;
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.2);
     }
 
     .toast.success {
-      border-left-color: #4ade80;
-      color: #4ade80;
+      border-left-color: #22c55e;
+      color: #22c55e;
+      border-color: rgba(34, 197, 94, 0.2);
     }
 
     @keyframes slideIn {
@@ -1554,6 +2150,61 @@ const GlobalStyle = () => (
       }
     }
 
+    /* ===== PRE-CHECK MODAL ===== */
+    .pre-check-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 3000;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal-content {
+      background: linear-gradient(135deg, rgba(26, 31, 58, 0.95), rgba(26, 31, 58, 0.85));
+      padding: 2rem;
+      border-radius: 12px;
+      max-width: 500px;
+      border: 1px solid rgba(232, 160, 32, 0.3);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    }
+
+    .modal-content h2 {
+      color: #e8a020;
+      margin-bottom: 1.5rem;
+    }
+
+    .checklist-items {
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .checklist-items label {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      cursor: pointer;
+      color: #b0b8cc;
+      transition: 0.2s;
+    }
+
+    .checklist-items label:hover {
+      color: #e8a020;
+    }
+
+    .checklist-items input {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+
     /* ===== LOADING ===== */
     .loading {
       display: flex;
@@ -1562,50 +2213,56 @@ const GlobalStyle = () => (
       height: 100vh;
       font-size: 1.1rem;
       color: #e8a020;
-      background: #0a0c15;
+      background: linear-gradient(135deg, #0a0c15 0%, #0f1222 100%);
       flex-direction: column;
       gap: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      font-weight: 600;
     }
 
     /* ===== RESPONSIVE ===== */
     @media (max-width: 768px) {
       .sidebar {
-        width: 70px;
+        width: 80px;
         padding: 1rem 0.5rem;
       }
 
-      .sidebar .logo,
-      .sidebar .section-label,
-      .sidebar .upgrade-card,
-      .sidebar-item span {
+      .logo, .sidebar .section-label, .upgrade-card {
         display: none;
       }
 
       .sidebar-item {
+        justify-content: center;
         padding: 8px;
-        text-align: center;
+      }
+
+      .item-label {
+        display: none;
       }
 
       .main-area {
-        margin-left: 70px;
+        margin-left: 80px;
       }
 
       .page-content {
         padding: 1rem;
       }
 
-      .stats {
-        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-        gap: 0.75rem;
+      .stats-grid-large {
+        grid-template-columns: repeat(2, 1fr);
       }
 
       form {
         flex-direction: column;
       }
 
-      input,
-      select {
+      input, select {
         min-width: 100%;
+      }
+
+      .session-grid {
+        grid-template-columns: 1fr;
       }
     }
 
