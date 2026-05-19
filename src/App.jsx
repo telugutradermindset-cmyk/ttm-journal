@@ -1,477 +1,1027 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://web-production-2c4af.up.railway.app';
 
-// Helper functions
-const getAuthToken = () => localStorage.getItem('token');
+// ==================== STYLES ====================
+const styles = `
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-const fetchWithAuth = async (endpoint, options = {}) => {
-  const token = getAuthToken();
-  const res = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Bearer ${token}` }),
-      ...options.headers,
-    },
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
-};
+:root {
+  --primary: #1a1f3a;
+  --secondary: #2d3561;
+  --accent: #00d4ff;
+  --accent-alt: #00ffaa;
+  --text-primary: #ffffff;
+  --text-secondary: #a0aec0;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --border: #3d4573;
+  --card-bg: #242b48;
+  --input-bg: #1a1f3a;
+}
 
-// ==================== LOGIN PAGE ====================
-const Login = () => {
-  const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  background: linear-gradient(135deg, #0f1419 0%, #1a1f3a 100%);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+}
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Login failed');
-      localStorage.setItem('token', data.token);
-      navigate('/');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
 
-  return (
-    <div className="auth-page">
-      <div className="auth-bg"></div>
-      <div className="auth-container">
-        <div className="auth-card">
-          <div className="auth-header">
-            <div className="auth-logo">
-              <div className="logo-icon">📊</div>
-              <div>
-                <h1>TTM Journal</h1>
-                <p>Professional Trading Analytics</p>
-              </div>
-            </div>
-          </div>
+/* ========== LAYOUT ========== */
+.app-container {
+  display: flex;
+  height: 100vh;
+  background: var(--primary);
+}
 
-          {error && <div className="error-alert">{error}</div>}
+.sidebar {
+  width: 280px;
+  background: linear-gradient(180deg, #1a1f3a 0%, #151a2f 100%);
+  border-right: 1px solid var(--border);
+  padding: 24px 0;
+  overflow-y: auto;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.3);
+}
 
-          <form onSubmit={handleSubmit} className="auth-form">
-            <div className="form-group">
-              <label>Email Address</label>
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
 
-            <div className="form-group">
-              <label>Password</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
 
-            <button type="submit" disabled={loading} className="btn-primary-large">
-              {loading ? '🔄 Logging in...' : '→ Enter War Room'}
-            </button>
-          </form>
+.sidebar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
 
-          <div className="auth-footer">
-            <p>New trader? <Link to="/signup">Create account</Link></p>
-            <p><a href="#forgot">Forgot password?</a></p>
-          </div>
-        </div>
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
 
-        <div className="auth-features">
-          <div className="feature">
-            <div className="feature-icon">📈</div>
-            <h3>Advanced Analytics</h3>
-            <p>Track P&L, win rate, drawdown & more</p>
-          </div>
-          <div className="feature">
-            <div className="feature-icon">🎯</div>
-            <h3>Trade Logging</h3>
-            <p>Log trades with emotions & ratings</p>
-          </div>
-          <div className="feature">
-            <div className="feature-icon">📊</div>
-            <h3>Smart Backtesting</h3>
-            <p>Monte Carlo simulations for your strategy</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+.logo {
+  padding: 0 24px 32px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
 
-// ==================== SIGNUP PAGE ====================
-const Signup = () => {
-  const navigate = useNavigate();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+.logo-icon {
+  font-size: 28px;
+}
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/api/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Signup failed');
-      localStorage.setItem('token', data.token);
-      navigate('/');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+.logo-text {
+  font-weight: 700;
+  font-size: 18px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-alt) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
 
-  return (
-    <div className="auth-page">
-      <div className="auth-bg"></div>
-      <div className="auth-container">
-        <div className="auth-card">
-          <div className="auth-header">
-            <div className="auth-logo">
-              <div className="logo-icon">📊</div>
-              <div>
-                <h1>TTM Journal</h1>
-                <p>Professional Trading Analytics</p>
-              </div>
-            </div>
-          </div>
+.nav-item {
+  padding: 12px 24px;
+  margin: 4px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  transition: all 0.3s ease;
+  border-left: 3px solid transparent;
+  position: relative;
+}
 
-          {error && <div className="error-alert">{error}</div>}
+.nav-item:hover {
+  background: rgba(0, 212, 255, 0.05);
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
 
-          <form onSubmit={handleSubmit} className="auth-form">
-            <div className="form-group">
-              <label>Full Name</label>
-              <input
-                type="text"
-                placeholder="Your Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-              />
-            </div>
+.nav-item.active {
+  background: rgba(0, 212, 255, 0.1);
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
 
-            <div className="form-group">
-              <label>Email Address</label>
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
+.nav-icon {
+  font-size: 18px;
+}
 
-            <div className="form-group">
-              <label>Password</label>
-              <input
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
+.main-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+  background: linear-gradient(135deg, #0f1419 0%, #1a1f3a 100%);
+}
 
-            <button type="submit" disabled={loading} className="btn-primary-large">
-              {loading ? '🔄 Creating account...' : '→ Start Trading'}
-            </button>
-          </form>
+.main-content::-webkit-scrollbar {
+  width: 8px;
+}
 
-          <div className="auth-footer">
-            <p>Already a trader? <Link to="/login">Login here</Link></p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
+.main-content::-webkit-scrollbar-track {
+  background: transparent;
+}
 
-// ==================== SIDEBAR ITEM ====================
-const SidebarItem = ({ to, label, active, icon }) => (
-  <Link to={to} className={`sidebar-item ${active ? 'active' : ''}`}>
-    <span className="item-icon">{icon}</span>
-    <span className="item-label">{label}</span>
-  </Link>
-);
+.main-content::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
 
-// ==================== SIDEBAR ====================
-const Sidebar = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const isActive = (path) => location.pathname === path;
+.main-content::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/login');
-  };
+/* ========== HEADER ========== */
+.page-header {
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
 
-  return (
-    <div className="sidebar">
-      <div className="sidebar-header">
-        <div className="logo-brand">
-          <div className="logo-circle">📊</div>
-          <div className="logo-text">
-            <div className="logo-main">TTM</div>
-            <div className="logo-sub">Journal</div>
-          </div>
-        </div>
-      </div>
+.page-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
 
-      <nav className="sidebar-nav">
-        <div className="nav-section">
-          <div className="nav-label">TRADING</div>
-          <SidebarItem to="/" label="Dashboard" active={isActive('/')} icon="🎯" />
-          <SidebarItem to="/trades" label="Trade Log" active={isActive('/trades')} icon="📝" />
-          <SidebarItem to="/analytics" label="Analytics" active={isActive('/analytics')} icon="📊" />
-          <SidebarItem to="/calendar" label="Calendar" active={isActive('/calendar')} icon="📅" />
-          <SidebarItem to="/backtest" label="Backtest" active={isActive('/backtest')} icon="🧪" />
-        </div>
+.page-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
 
-        <div className="nav-section">
-          <div className="nav-label">TOOLS</div>
-          <SidebarItem to="/rules" label="Trading Rules" active={isActive('/rules')} icon="📖" />
-          <SidebarItem to="/checklist" label="Pre-Trade Check" active={isActive('/checklist')} icon="✅" />
-          <SidebarItem to="/profile" label="Settings" active={isActive('/profile')} icon="⚙️" />
-        </div>
-      </nav>
+.header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
 
-      <div className="sidebar-footer">
-        <div className="premium-badge">
-          <div className="badge-icon">👑</div>
-          <div className="badge-text">
-            <div className="badge-title">PRO MEMBER</div>
-            <div className="badge-subtitle">Unlimited access</div>
-          </div>
-        </div>
-        <button className="btn-logout" onClick={handleLogout}>
-          🚪 Logout
-        </button>
-      </div>
-    </div>
-  );
-};
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(0, 212, 255, 0.05);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
 
-// ==================== TOAST NOTIFICATION ====================
-const Toast = ({ message, type, onClose }) => {
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-alt) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--primary);
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ========== BUTTONS ========== */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, #0099cc 100%);
+  color: var(--primary);
+  box-shadow: 0 4px 15px rgba(0, 212, 255, 0.3);
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 212, 255, 0.4);
+}
+
+.btn-secondary {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background: var(--secondary);
+  border-color: var(--accent);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* ========== CARDS ========== */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 24px;
+  transition: all 0.3s ease;
+}
+
+.card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(0, 212, 255, 0.1);
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title-icon {
+  font-size: 20px;
+}
+
+/* ========== STAT CARDS ========== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-alt) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.stat-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgba(0, 212, 255, 0.1);
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.stat-change {
+  font-size: 12px;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stat-change.positive {
+  color: var(--success);
+}
+
+.stat-change.negative {
+  color: var(--danger);
+}
+
+/* ========== FORMS ========== */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: all 0.3s ease;
+  font-family: inherit;
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+  background: rgba(0, 212, 255, 0.02);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* ========== TABLE ========== */
+.table-container {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table thead {
+  background: rgba(0, 212, 255, 0.05);
+  border-bottom: 2px solid var(--border);
+}
+
+.table th {
+  padding: 16px;
+  text-align: left;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 12px;
+}
+
+.table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.table tbody tr:hover {
+  background: rgba(0, 212, 255, 0.03);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ========== BADGES ========== */
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-success {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--success);
+}
+
+.badge-danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--danger);
+}
+
+.badge-warning {
+  background: rgba(245, 158, 11, 0.2);
+  color: var(--warning);
+}
+
+.badge-info {
+  background: rgba(0, 212, 255, 0.2);
+  color: var(--accent);
+}
+
+/* ========== MODAL ========== */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-overlay.active {
+  display: flex;
+}
+
+.modal {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 24px;
+  cursor: pointer;
+  transition: color 0.3s ease;
+}
+
+.modal-close:hover {
+  color: var(--accent);
+}
+
+.modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+/* ========== TABS ========== */
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.tab {
+  padding: 12px 24px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  position: relative;
+  transition: color 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 12px;
+}
+
+.tab:hover {
+  color: var(--accent);
+}
+
+.tab.active {
+  color: var(--accent);
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-alt) 100%);
+}
+
+/* ========== RATING ========== */
+.rating {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.star {
+  font-size: 24px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.star:hover,
+.star.active {
+  color: var(--warning);
+  transform: scale(1.2);
+}
+
+/* ========== TOAST ========== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 2000;
+  animation: slideInRight 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 400px;
+}
+
+.toast.success {
+  border-left: 4px solid var(--success);
+}
+
+.toast.error {
+  border-left: 4px solid var(--danger);
+}
+
+.toast.info {
+  border-left: 4px solid var(--accent);
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ========== LOADING ========== */
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-secondary);
+}
+
+.spinner {
+  display: inline-block;
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    max-height: 70px;
+    padding: 0 20px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    display: flex;
+    align-items: center;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+
+  .logo {
+    padding: 0;
+    margin: 0;
+    border: none;
+  }
+
+  .nav-item {
+    padding: 12px 16px;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  .main-content {
+    padding: 20px;
+  }
+
+  .page-title {
+    font-size: 24px;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .modal {
+    padding: 20px;
+  }
+}
+`;
+
+// ==================== COMPONENTS ====================
+
+function Toast({ message, type = 'success', onClose }) {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
     return () => clearTimeout(timer);
   }, [onClose]);
 
-  return <div className={`toast toast-${type}`}>{message}</div>;
-};
-
-// ==================== STAT CARD COMPONENT ====================
-const StatCard = ({ icon, label, value, change, color = 'default' }) => {
   return (
-    <div className={`stat-card stat-${color}`}>
-      <div className="stat-header">
-        <div className="stat-icon">{icon}</div>
-        <div className="stat-label">{label}</div>
-      </div>
-      <div className="stat-value">{value}</div>
-      {change && <div className="stat-change">{change}</div>}
+    <div className={`toast ${type}`}>
+      <span>{type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}</span>
+      {message}
     </div>
   );
-};
+}
 
-// ==================== CALENDAR HEATMAP ====================
-const CalendarHeatmap = ({ trades }) => {
-  const getDayColor = (day) => {
-    const trades_for_day = trades.filter(
-      (t) => new Date(t.date).toDateString() === day.toDateString()
-    );
-    if (trades_for_day.length === 0) return 'rgba(255, 255, 255, 0.05)';
-    const pnl = trades_for_day.reduce(
-      (sum, t) =>
-        sum +
-        (t.exitPrice - t.entryPrice) *
-          (t.direction === 'long' ? 1 : -1) *
-          t.quantity,
-      0
-    );
-    if (pnl > 100) return '#10b981';
-    if (pnl > 0) return '#84cc16';
-    if (pnl > -100) return '#ef4444';
-    return '#7f1d1d';
-  };
+function LoginPage({ onLogin }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [isSignup, setIsSignup] = useState(false);
+  const [name, setName] = useState('');
 
-  const last30Days = [];
-  const today = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    last30Days.push(d);
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-  return (
-    <div className="heatmap-card">
-      <h3>30-Day P&L Heatmap</h3>
-      <div className="heatmap-grid">
-        {last30Days.map((day, idx) => {
-          const pnl = trades
-            .filter((t) => new Date(t.date).toDateString() === day.toDateString())
-            .reduce(
-              (sum, t) =>
-                sum +
-                (t.exitPrice - t.entryPrice) *
-                  (t.direction === 'long' ? 1 : -1) *
-                  t.quantity,
-              0
-            );
-          return (
-            <div
-              key={idx}
-              className="heatmap-cell"
-              style={{ backgroundColor: getDayColor(day) }}
-              title={`${day.toDateString()}: $${pnl.toFixed(2)}`}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
-};
+    try {
+      const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
+      const payload = isSignup 
+        ? { name, email, password }
+        : { email, password };
 
-// ==================== DASHBOARD PAGE ====================
-const Dashboard = ({ trades, user }) => {
-  const stats = {
-    totalTrades: trades.length,
-    wins: trades.filter((t) => t.outcome === 'win').length,
-    losses: trades.filter((t) => t.outcome === 'loss').length,
-    winRate:
-      trades.length > 0
-        ? ((trades.filter((t) => t.outcome === 'win').length / trades.length) * 100).toFixed(1)
-        : 0,
-    totalPnL: trades.reduce(
-      (sum, t) =>
-        sum + (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity,
-      0
-    ),
-  };
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-  const getTodayStats = () => {
-    const today = new Date().toDateString();
-    const todayTrades = trades.filter((t) => new Date(t.date).toDateString() === today);
-    return todayTrades.reduce(
-      (sum, t) =>
-        sum + (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity,
-      0
-    );
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Authentication failed');
+      }
+
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      onLogin(data.token, data.user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div className="page-title">
-          <h1>Trading Dashboard</h1>
-          <p>Welcome back, {user.name}!</p>
+    <div style={{
+      display: 'flex',
+      height: '100vh',
+      background: 'linear-gradient(135deg, #0f1419 0%, #1a1f3a 100%)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: '420px',
+        padding: '40px',
+      }}>
+        <div style={{ marginBottom: '32px', textAlign: 'center' }}>
+          <div style={{
+            fontSize: '48px',
+            marginBottom: '16px',
+            background: 'linear-gradient(135deg, #00d4ff 0%, #00ffaa 100%)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}>
+            📈
+          </div>
+          <h1 style={{ fontSize: '28px', color: '#fff', marginBottom: '8px', fontWeight: '700' }}>
+            TTM Journal Pro
+          </h1>
+          <p style={{ color: '#a0aec0', fontSize: '14px' }}>
+            Professional Trading Journal
+          </p>
         </div>
-        <Link to="/trades" className="btn-secondary">+ Log Trade</Link>
+
+        <form onSubmit={handleSubmit} className="card" style={{ marginBottom: '0' }}>
+          {error && (
+            <div style={{
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.5)',
+              color: '#ef4444',
+              padding: '12px',
+              borderRadius: '8px',
+              marginBottom: '20px',
+              fontSize: '13px',
+            }}>
+              {error}
+            </div>
+          )}
+
+          {isSignup && (
+            <div className="form-group">
+              <label className="form-label">Full Name</label>
+              <input
+                type="text"
+                className="form-input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label">Email Address</label>
+            <input
+              type="email"
+              className="form-input"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <input
+              type="password"
+              className="form-input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={loading}>
+            {loading ? 'Processing...' : (isSignup ? 'Create Account' : 'Sign In')}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsSignup(!isSignup)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              border: 'none',
+              background: 'none',
+              color: '#00d4ff',
+              cursor: 'pointer',
+              marginTop: '16px',
+              fontSize: '14px',
+              fontWeight: '600',
+            }}
+          >
+            {isSignup ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({ trades, user }) {
+  const totalTrades = trades.length;
+  const wins = trades.filter(t => t.outcome === 'win').length;
+  const losses = trades.filter(t => t.outcome === 'loss').length;
+  const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(2) : 0;
+  const totalPnL = trades.reduce((sum, t) => sum + (parseFloat(t.pnl) || 0), 0);
+  
+  const chartData = trades.map(t => ({
+    date: new Date(t.date).toLocaleDateString(),
+    pnl: parseFloat(t.pnl) || 0,
+  })).slice(-30);
+
+  return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-subtitle">Trading Performance Overview</p>
+        </div>
       </div>
 
       <div className="stats-grid">
-        <StatCard
-          icon="🎯"
-          label="Total Trades"
-          value={stats.totalTrades}
-          color="primary"
-        />
-        <StatCard
-          icon="📈"
-          label="Win Rate"
-          value={`${stats.winRate}%`}
-          color={stats.winRate >= 50 ? 'success' : 'warning'}
-        />
-        <StatCard
-          icon="💰"
-          label="Total P&L"
-          value={`$${stats.totalPnL.toFixed(2)}`}
-          color={stats.totalPnL >= 0 ? 'success' : 'danger'}
-        />
-        <StatCard
-          icon="📊"
-          label="Today P&L"
-          value={`$${getTodayStats().toFixed(2)}`}
-          color={getTodayStats() >= 0 ? 'success' : 'danger'}
-        />
+        <div className="stat-card">
+          <div className="stat-label">📊 Total Trades</div>
+          <div className="stat-value">{totalTrades}</div>
+          <div className="stat-change positive">↑ All time</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">✅ Winning Trades</div>
+          <div className="stat-value">{wins}</div>
+          <div className="stat-change positive">+{wins}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">❌ Losing Trades</div>
+          <div className="stat-value">{losses}</div>
+          <div className="stat-change negative">-{losses}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">📈 Win Rate</div>
+          <div className="stat-value">{winRate}%</div>
+          <div className="stat-change positive">Professional</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">💰 Total P&L</div>
+          <div className="stat-value" style={{ color: totalPnL >= 0 ? '#10b981' : '#ef4444' }}>
+            ${totalPnL.toFixed(2)}
+          </div>
+          <div className={`stat-change ${totalPnL >= 0 ? 'positive' : 'negative'}`}>
+            {totalPnL >= 0 ? '↑' : '↓'} Performance
+          </div>
+        </div>
       </div>
 
-      <div className="dashboard-grid">
+      {chartData.length > 0 && (
         <div className="card">
-          <h3>Recent Trades</h3>
-          {trades.length > 0 ? (
-            <table className="mini-table">
+          <div className="card-title">
+            <span className="card-title-icon">📊</span>
+            30-Day Performance
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#3d4573" />
+              <XAxis dataKey="date" stroke="#a0aec0" />
+              <YAxis stroke="#a0aec0" />
+              <Tooltip
+                contentStyle={{
+                  background: '#242b48',
+                  border: '1px solid #3d4573',
+                  borderRadius: '8px',
+                  color: '#fff',
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="pnl"
+                stroke="#00d4ff"
+                strokeWidth={2}
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {trades.length > 0 && (
+        <div className="card">
+          <div className="card-title">
+            <span className="card-title-icon">📋</span>
+            Recent Trades
+          </div>
+          <div className="table-container">
+            <table className="table">
               <thead>
                 <tr>
+                  <th>Date</th>
                   <th>Pair</th>
-                  <th>Dir</th>
-                  <th>Outcome</th>
+                  <th>Direction</th>
+                  <th>Entry</th>
+                  <th>Exit</th>
+                  <th>Result</th>
                   <th>P&L</th>
                 </tr>
               </thead>
               <tbody>
-                {trades.slice(-5).map((t) => {
-                  const pnl = (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
-                  return (
-                    <tr key={t._id}>
-                      <td>{t.pair}</td>
-                      <td>{t.direction === 'long' ? '📈' : '📉'}</td>
-                      <td>
-                        <span className={`badge badge-${t.outcome}`}>{t.outcome}</span>
-                      </td>
-                      <td style={{ color: pnl >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
-                        ${pnl.toFixed(2)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {trades.slice(-5).reverse().map(trade => (
+                  <tr key={trade._id}>
+                    <td>{new Date(trade.date).toLocaleDateString()}</td>
+                    <td><strong>{trade.pair}</strong></td>
+                    <td>
+                      <span className={`badge ${trade.direction === 'long' ? 'badge-success' : 'badge-danger'}`}>
+                        {trade.direction}
+                      </span>
+                    </td>
+                    <td>{trade.entryPrice.toFixed(4)}</td>
+                    <td>{trade.exitPrice.toFixed(4)}</td>
+                    <td>
+                      <span className={`badge badge-${trade.outcome === 'win' ? 'success' : trade.outcome === 'loss' ? 'danger' : 'warning'}`}>
+                        {trade.outcome}
+                      </span>
+                    </td>
+                    <td style={{ color: trade.pnl >= 0 ? '#10b981' : '#ef4444', fontWeight: '600' }}>
+                      ${trade.pnl?.toFixed(2) || '0.00'}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
-          ) : (
-            <p className="empty">Start logging trades to see them here</p>
-          )}
+          </div>
         </div>
-
-        <CalendarHeatmap trades={trades} />
-      </div>
+      )}
     </div>
   );
-};
+}
 
-// ==================== TRADE LOG PAGE ====================
-const TradeLog = ({ trades, setTrades, showToast }) => {
-  const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 16),
+function TradeLog({ onAddTrade, trades }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editId, setEditId] = useState(null);
+  const [formData, setFormData] = useState({
+    date: new Date().toISOString().split('T')[0],
     pair: '',
     entryPrice: '',
     exitPrice: '',
@@ -480,1611 +1030,624 @@ const TradeLog = ({ trades, setTrades, showToast }) => {
     outcome: 'win',
     strategy: '',
     emotion: 'calm',
-    rating: 0,
+    rating: 3,
+    pnl: 0,
   });
-  const [editingTrade, setEditingTrade] = useState(null);
-  const [filters, setFilters] = useState({ pair: '', outcome: '', strategy: '' });
+
+  const handleChange = (field, value) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: value };
+      
+      // Auto-calculate P&L
+      if (['entryPrice', 'exitPrice', 'quantity', 'direction'].includes(field)) {
+        const entry = parseFloat(updated.entryPrice) || 0;
+        const exit = parseFloat(updated.exitPrice) || 0;
+        const qty = parseFloat(updated.quantity) || 0;
+        const diff = updated.direction === 'long' ? (exit - entry) * qty : (entry - exit) * qty;
+        updated.pnl = diff;
+      }
+
+      return updated;
+    });
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
     try {
-      const payload = {
-        ...form,
-        entryPrice: parseFloat(form.entryPrice),
-        exitPrice: parseFloat(form.exitPrice),
-        quantity: parseFloat(form.quantity),
-        rating: parseInt(form.rating),
-      };
-
-      if (editingTrade) {
-        await fetchWithAuth(`/api/trades/${editingTrade._id}`, {
-          method: 'PUT',
-          body: JSON.stringify(payload),
-        });
-        setTrades(trades.map((t) => (t._id === editingTrade._id ? { ...t, ...payload } : t)));
-        showToast('✓ Trade updated!', 'success');
-        setEditingTrade(null);
-      } else {
-        const newTrade = await fetchWithAuth('/api/trades', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        setTrades([...trades, newTrade]);
-        showToast('✓ Trade logged!', 'success');
-      }
-
-      setForm({
-        date: new Date().toISOString().slice(0, 16),
-        pair: '',
-        entryPrice: '',
-        exitPrice: '',
-        quantity: '',
-        direction: 'long',
-        outcome: 'win',
-        strategy: '',
-        emotion: 'calm',
-        rating: 0,
+      const url = editId 
+        ? `${API_URL}/api/trades/${editId}`
+        : `${API_URL}/api/trades`;
+      
+      const method = editId ? 'PUT' : 'POST';
+      
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify(formData),
       });
+
+      if (response.ok) {
+        onAddTrade();
+        setShowForm(false);
+        setEditId(null);
+        setFormData({
+          date: new Date().toISOString().split('T')[0],
+          pair: '',
+          entryPrice: '',
+          exitPrice: '',
+          quantity: '',
+          direction: 'long',
+          outcome: 'win',
+          strategy: '',
+          emotion: 'calm',
+          rating: 3,
+          pnl: 0,
+        });
+      }
     } catch (err) {
-      showToast(err.message, 'error');
+      console.error('Error saving trade:', err);
     }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this trade?')) return;
-    try {
-      await fetchWithAuth(`/api/trades/${id}`, { method: 'DELETE' });
-      setTrades(trades.filter((t) => t._id !== id));
-      showToast('✓ Trade deleted', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  const filteredTrades = trades.filter((t) => {
-    if (filters.pair && t.pair !== filters.pair) return false;
-    if (filters.outcome && t.outcome !== filters.outcome) return false;
-    if (filters.strategy && t.strategy !== filters.strategy) return false;
-    return true;
-  });
-
-  const exportCSV = () => {
-    const headers = ['Date', 'Pair', 'Direction', 'Entry', 'Exit', 'Qty', 'Outcome', 'P&L', 'Emotion', 'Rating'];
-    const rows = filteredTrades.map((t) => {
-      const pnl = (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
-      return [
-        new Date(t.date).toLocaleDateString(),
-        t.pair,
-        t.direction,
-        t.entryPrice.toFixed(5),
-        t.exitPrice.toFixed(5),
-        t.quantity,
-        t.outcome,
-        pnl.toFixed(2),
-        t.emotion,
-        t.rating,
-      ];
-    });
-    const csv = [headers, ...rows].map((r) => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `trades_${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    showToast('✓ CSV exported!', 'success');
   };
 
   return (
-    <div className="page">
+    <div>
       <div className="page-header">
-        <h1>{editingTrade ? '✏️ Edit Trade' : '📝 Log New Trade'}</h1>
-        {filteredTrades.length > 0 && (
-          <button onClick={exportCSV} className="btn-secondary">📥 Export CSV</button>
-        )}
+        <div>
+          <h1 className="page-title">Trade Log</h1>
+          <p className="page-subtitle">Record and Manage Your Trades</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
+          {showForm ? '✕ Cancel' : '+ New Trade'}
+        </button>
       </div>
 
-      <div className="card form-card">
-        <form onSubmit={handleSubmit}>
-          <div className="form-row">
-            <div className="form-group">
-              <label>Date & Time</label>
-              <input
-                type="datetime-local"
-                value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Pair</label>
-              <input
-                placeholder="EURUSD"
-                value={form.pair}
-                onChange={(e) => setForm({ ...form, pair: e.target.value.toUpperCase() })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Entry</label>
-              <input
-                type="number"
-                step="any"
-                placeholder="1.0950"
-                value={form.entryPrice}
-                onChange={(e) => setForm({ ...form, entryPrice: e.target.value })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Exit</label>
-              <input
-                type="number"
-                step="any"
-                placeholder="1.0960"
-                value={form.exitPrice}
-                onChange={(e) => setForm({ ...form, exitPrice: e.target.value })}
-                required
-              />
-            </div>
-          </div>
+      {showForm && (
+        <div className="card">
+          <form onSubmit={handleSubmit}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+              <div className="form-group">
+                <label className="form-label">Date</label>
+                <input
+                  type="date"
+                  className="form-input"
+                  value={formData.date}
+                  onChange={(e) => handleChange('date', e.target.value)}
+                  required
+                />
+              </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Quantity</label>
-              <input
-                type="number"
-                step="any"
-                placeholder="1"
-                value={form.quantity}
-                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Direction</label>
-              <select value={form.direction} onChange={(e) => setForm({ ...form, direction: e.target.value })}>
-                <option>long</option>
-                <option>short</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Outcome</label>
-              <select value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })}>
-                <option>win</option>
-                <option>loss</option>
-                <option>breakeven</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Strategy</label>
-              <input
-                placeholder="e.g. Support Bounce"
-                value={form.strategy}
-                onChange={(e) => setForm({ ...form, strategy: e.target.value })}
-              />
-            </div>
-          </div>
+              <div className="form-group">
+                <label className="form-label">Currency Pair</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="EURUSD"
+                  value={formData.pair}
+                  onChange={(e) => handleChange('pair', e.target.value)}
+                  required
+                />
+              </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Emotion</label>
-              <select value={form.emotion} onChange={(e) => setForm({ ...form, emotion: e.target.value })}>
-                <option value="calm">😌 Calm</option>
-                <option value="confident">😎 Confident</option>
-                <option value="fearful">😨 Fearful</option>
-                <option value="fomo">🤑 FOMO</option>
-                <option value="frustrated">😤 Frustrated</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Rating</label>
-              <div className="rating-selector">
-                {[1, 2, 3, 4, 5].map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => setForm({ ...form, rating: r })}
-                    className={`rating-btn ${form.rating >= r ? 'active' : ''}`}
-                  >
-                    ⭐
-                  </button>
-                ))}
+              <div className="form-group">
+                <label className="form-label">Entry Price</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  step="0.0001"
+                  value={formData.entryPrice}
+                  onChange={(e) => handleChange('entryPrice', e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Exit Price</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  step="0.0001"
+                  value={formData.exitPrice}
+                  onChange={(e) => handleChange('exitPrice', e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Quantity (Lots)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  step="0.01"
+                  value={formData.quantity}
+                  onChange={(e) => handleChange('quantity', e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Direction</label>
+                <select
+                  className="form-select"
+                  value={formData.direction}
+                  onChange={(e) => handleChange('direction', e.target.value)}
+                >
+                  <option value="long">Long 📈</option>
+                  <option value="short">Short 📉</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Strategy</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g., Breakout, Reversal"
+                  value={formData.strategy}
+                  onChange={(e) => handleChange('strategy', e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Emotion</label>
+                <select
+                  className="form-select"
+                  value={formData.emotion}
+                  onChange={(e) => handleChange('emotion', e.target.value)}
+                >
+                  <option value="calm">😊 Calm</option>
+                  <option value="confident">💪 Confident</option>
+                  <option value="fearful">😰 Fearful</option>
+                  <option value="fomo">🚀 FOMO</option>
+                  <option value="frustrated">😤 Frustrated</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Outcome</label>
+                <select
+                  className="form-select"
+                  value={formData.outcome}
+                  onChange={(e) => handleChange('outcome', e.target.value)}
+                >
+                  <option value="win">✅ Win</option>
+                  <option value="loss">❌ Loss</option>
+                  <option value="breakeven">⚖️ Breakeven</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Rating</label>
+                <div className="rating">
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <span
+                      key={star}
+                      className={`star ${formData.rating >= star ? 'active' : ''}`}
+                      onClick={() => handleChange('rating', star)}
+                    >
+                      ⭐
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Calculated P&L</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={formData.pnl}
+                  disabled
+                  style={{ opacity: 0.6 }}
+                />
               </div>
             </div>
-          </div>
 
-          <div className="form-actions">
-            <button type="submit" className="btn-primary">
-              {editingTrade ? '✏️ Update Trade' : '💾 Save Trade'}
-            </button>
-            {editingTrade && (
-              <button type="button" onClick={() => setEditingTrade(null)} className="btn-secondary">
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+              <button type="submit" className="btn btn-primary">
+                {editId ? '✓ Update Trade' : '+ Add Trade'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditId(null);
+                }}
+              >
                 Cancel
               </button>
-            )}
+            </div>
+          </form>
+        </div>
+      )}
+
+      {trades.length > 0 && (
+        <div className="card">
+          <div className="card-title">
+            <span className="card-title-icon">📋</span>
+            All Trades
           </div>
-        </form>
-      </div>
-
-      <div className="filters">
-        <select value={filters.pair} onChange={(e) => setFilters({ ...filters, pair: e.target.value })}>
-          <option value="">All pairs</option>
-          {[...new Set(trades.map((t) => t.pair))].map((p) => (
-            <option key={p}>{p}</option>
-          ))}
-        </select>
-        <select value={filters.outcome} onChange={(e) => setFilters({ ...filters, outcome: e.target.value })}>
-          <option value="">All outcomes</option>
-          <option>win</option>
-          <option>loss</option>
-          <option>breakeven</option>
-        </select>
-        <select value={filters.strategy} onChange={(e) => setFilters({ ...filters, strategy: e.target.value })}>
-          <option value="">All strategies</option>
-          {[...new Set(trades.map((t) => t.strategy).filter(Boolean))].map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-      </div>
-
-      <div className="card">
-        <h3>Trade History</h3>
-        {filteredTrades.length > 0 ? (
-          <table className="trade-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Pair</th>
-                <th>Dir</th>
-                <th>Entry/Exit</th>
-                <th>Outcome</th>
-                <th>P&L</th>
-                <th>Emotion</th>
-                <th>Rating</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTrades.map((t) => {
-                const pnl = (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
-                return (
-                  <tr key={t._id}>
-                    <td>{new Date(t.date).toLocaleDateString()}</td>
-                    <td>{t.pair}</td>
-                    <td>{t.direction === 'long' ? '📈' : '📉'}</td>
-                    <td>{t.entryPrice.toFixed(5)}/{t.exitPrice.toFixed(5)}</td>
-                    <td>
-                      <span className={`badge badge-${t.outcome}`}>{t.outcome}</span>
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Pair</th>
+                  <th>Direction</th>
+                  <th>Entry</th>
+                  <th>Exit</th>
+                  <th>Qty</th>
+                  <th>Result</th>
+                  <th>P&L</th>
+                  <th>Emotion</th>
+                  <th>Rating</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trades.map(trade => (
+                  <tr key={trade._id}>
+                    <td>{new Date(trade.date).toLocaleDateString()}</td>
+                    <td><strong>{trade.pair}</strong></td>
+                    <td><span className={`badge ${trade.direction === 'long' ? 'badge-success' : 'badge-danger'}`}>{trade.direction}</span></td>
+                    <td>{trade.entryPrice?.toFixed(4)}</td>
+                    <td>{trade.exitPrice?.toFixed(4)}</td>
+                    <td>{trade.quantity}</td>
+                    <td><span className={`badge badge-${trade.outcome === 'win' ? 'success' : trade.outcome === 'loss' ? 'danger' : 'warning'}`}>{trade.outcome}</span></td>
+                    <td style={{ color: trade.pnl >= 0 ? '#10b981' : '#ef4444', fontWeight: '600' }}>
+                      ${trade.pnl?.toFixed(2) || '0.00'}
                     </td>
-                    <td style={{ color: pnl >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
-                      ${pnl.toFixed(2)}
-                    </td>
-                    <td>{t.emotion || '-'}</td>
-                    <td>{'⭐'.repeat(t.rating || 0) || '-'}</td>
+                    <td>{trade.emotion}</td>
+                    <td>{'⭐'.repeat(trade.rating)}</td>
                     <td>
-                      <button
-                        className="action-btn"
-                        onClick={() => {
-                          setEditingTrade(t);
-                          setForm({
-                            date: new Date(t.date).toISOString().slice(0, 16),
-                            pair: t.pair,
-                            entryPrice: t.entryPrice,
-                            exitPrice: t.exitPrice,
-                            quantity: t.quantity,
-                            direction: t.direction,
-                            outcome: t.outcome,
-                            strategy: t.strategy,
-                            emotion: t.emotion,
-                            rating: t.rating,
-                          });
-                        }}
-                      >
-                        ✏️
-                      </button>
-                      <button className="action-btn" onClick={() => handleDelete(t._id)}>
-                        🗑️
-                      </button>
+                      <button className="btn btn-small btn-secondary" onClick={() => {
+                        setFormData(trade);
+                        setEditId(trade._id);
+                        setShowForm(true);
+                      }}>Edit</button>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        ) : (
-          <p className="empty">No trades found</p>
-        )}
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
-};
+}
 
-// ==================== ANALYTICS PAGE ====================
-const Analytics = ({ trades }) => {
-  const calculateStats = () => {
-    const wins = trades.filter((t) => t.outcome === 'win');
-    const losses = trades.filter((t) => t.outcome === 'loss');
-    const totalPnL = trades.reduce(
-      (sum, t) => sum + (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity,
-      0
-    );
-    const avgWin =
-      wins.length > 0
-        ? wins.reduce(
-            (sum, t) =>
-              sum + (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity,
-            0
-          ) / wins.length
-        : 0;
-    const avgLoss =
-      losses.length > 0
-        ? losses.reduce(
-            (sum, t) =>
-              sum + (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity,
-            0
-          ) / losses.length
-        : 0;
-    const profitFactor = Math.abs(avgLoss) > 0 ? Math.abs(avgWin / avgLoss) : 0;
-
-    return { totalPnL, avgWin, avgLoss, profitFactor, wins: wins.length, losses: losses.length };
-  };
-
-  const stats = calculateStats();
-
+function Analytics({ trades }) {
   const pairStats = {};
-  trades.forEach((t) => {
-    if (!pairStats[t.pair]) pairStats[t.pair] = { total: 0, count: 0 };
-    pairStats[t.pair].total +=
-      (t.exitPrice - t.entryPrice) * (t.direction === 'long' ? 1 : -1) * t.quantity;
-    pairStats[t.pair].count += 1;
+  const strategyStats = {};
+
+  trades.forEach(t => {
+    if (!pairStats[t.pair]) {
+      pairStats[t.pair] = { wins: 0, losses: 0, total: 0 };
+    }
+    if (!strategyStats[t.strategy]) {
+      strategyStats[t.strategy] = { wins: 0, losses: 0, total: 0 };
+    }
+
+    pairStats[t.pair].total++;
+    strategyStats[t.strategy].total++;
+
+    if (t.outcome === 'win') {
+      pairStats[t.pair].wins++;
+      strategyStats[t.strategy].wins++;
+    } else if (t.outcome === 'loss') {
+      pairStats[t.pair].losses++;
+      strategyStats[t.strategy].losses++;
+    }
   });
 
+  const pairData = Object.entries(pairStats).map(([pair, stats]) => ({
+    name: pair,
+    'Win Rate': ((stats.wins / stats.total) * 100).toFixed(1),
+    Wins: stats.wins,
+    Losses: stats.losses,
+  }));
+
   return (
-    <div className="page">
-      <h1>📊 Analytics</h1>
-
-      <div className="stats-grid">
-        <StatCard
-          icon="💰"
-          label="Total P&L"
-          value={`$${stats.totalPnL.toFixed(2)}`}
-          color={stats.totalPnL >= 0 ? 'success' : 'danger'}
-        />
-        <StatCard
-          icon="📈"
-          label="Avg Win"
-          value={`$${stats.avgWin.toFixed(2)}`}
-          color="success"
-        />
-        <StatCard
-          icon="📉"
-          label="Avg Loss"
-          value={`$${stats.avgLoss.toFixed(2)}`}
-          color="danger"
-        />
-        <StatCard
-          icon="⚖️"
-          label="Profit Factor"
-          value={stats.profitFactor.toFixed(2)}
-          color="primary"
-        />
-      </div>
-
-      <div className="dashboard-grid">
-        <div className="card">
-          <h3>Pair Performance</h3>
-          <table className="mini-table">
-            <thead>
-              <tr>
-                <th>Pair</th>
-                <th>Trades</th>
-                <th>P&L</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(pairStats).map(([pair, data]) => (
-                <tr key={pair}>
-                  <td>{pair}</td>
-                  <td>{data.count}</td>
-                  <td style={{ color: data.total >= 0 ? '#10b981' : '#ef4444', fontWeight: 'bold' }}>
-                    ${data.total.toFixed(2)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Analytics</h1>
+          <p className="page-subtitle">Performance Analysis by Pair & Strategy</p>
         </div>
       </div>
+
+      {pairData.length > 0 && (
+        <div className="card">
+          <div className="card-title">
+            <span className="card-title-icon">📊</span>
+            Pair Performance
+          </div>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={pairData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#3d4573" />
+              <XAxis dataKey="name" stroke="#a0aec0" />
+              <YAxis stroke="#a0aec0" />
+              <Tooltip
+                contentStyle={{
+                  background: '#242b48',
+                  border: '1px solid #3d4573',
+                  borderRadius: '8px',
+                  color: '#fff',
+                }}
+              />
+              <Legend />
+              <Bar dataKey="Wins" fill="#10b981" />
+              <Bar dataKey="Losses" fill="#ef4444" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {pairData.length > 0 && (
+        <div className="card">
+          <div className="card-title">
+            <span className="card-title-icon">📈</span>
+            Detailed Statistics
+          </div>
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Pair</th>
+                  <th>Total Trades</th>
+                  <th>Wins</th>
+                  <th>Losses</th>
+                  <th>Win Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pairData.map(row => (
+                  <tr key={row.name}>
+                    <td><strong>{row.name}</strong></td>
+                    <td>{row.Wins + row.Losses}</td>
+                    <td><span className="badge badge-success">{row.Wins}</span></td>
+                    <td><span className="badge badge-danger">{row.Losses}</span></td>
+                    <td><strong style={{ color: '#00d4ff' }}>{row['Win Rate']}%</strong></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
-};
+}
 
-// ==================== CALENDAR PAGE ====================
-const Calendar = ({ trades }) => {
-  return (
-    <div className="page">
-      <h1>📅 Calendar</h1>
-      <div className="card">
-        <CalendarHeatmap trades={trades} />
-      </div>
-    </div>
-  );
-};
+function Settings({ user, onLogout }) {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-// ==================== BACKTEST PAGE ====================
-const Backtest = ({ trades }) => {
-  const [simulations, setSimulations] = useState(100);
-
-  const runBacktest = () => {
-    if (trades.length < 10) {
-      alert('Need at least 10 trades for backtesting');
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      alert('Passwords do not match');
       return;
     }
 
-    const paths = [];
-    for (let sim = 0; sim < simulations; sim++) {
-      let equity = 1000;
-      for (let i = 0; i < trades.length; i++) {
-        const randomTrade = trades[Math.floor(Math.random() * trades.length)];
-        const pnl =
-          (randomTrade.exitPrice - randomTrade.entryPrice) *
-          (randomTrade.direction === 'long' ? 1 : -1) *
-          randomTrade.quantity;
-        equity += pnl;
-      }
-      paths.push(equity);
-    }
-
-    const sorted = paths.sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)];
-    const p10 = sorted[Math.floor(sorted.length * 0.1)];
-    const p90 = sorted[Math.floor(sorted.length * 0.9)];
-    const profitableCount = paths.filter((p) => p > 1000).length;
-
-    alert(`
-🧪 Monte Carlo Backtest (${simulations} simulations)
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-Median: $${median.toFixed(0)}
-Pessimistic (10%): $${p10.toFixed(0)}
-Optimistic (90%): $${p90.toFixed(0)}
-Profitable: ${((profitableCount / simulations) * 100).toFixed(1)}%
-    `);
-  };
-
-  return (
-    <div className="page">
-      <h1>🧪 Backtesting</h1>
-      <div className="card">
-        <label>
-          Simulations:
-          <input
-            type="number"
-            value={simulations}
-            onChange={(e) => setSimulations(parseInt(e.target.value))}
-            min="50"
-            max="1000"
-            style={{ marginLeft: '1rem', width: '100px' }}
-          />
-        </label>
-        <button onClick={runBacktest} className="btn-primary" style={{ marginLeft: '1rem' }}>
-          ▶️ Run Backtest
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ==================== RULES PAGE ====================
-const Rules = ({ user, showToast }) => {
-  const [rules, setRules] = useState(user?.tradingRules || '');
-
-  const save = async () => {
+    setLoading(true);
     try {
-      await fetchWithAuth('/api/user/profile', {
-        method: 'PUT',
-        body: JSON.stringify({ tradingRules: rules }),
-      });
-      showToast('✓ Rules saved!', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  return (
-    <div className="page">
-      <h1>📖 Trading Rules</h1>
-      <div className="card">
-        <textarea
-          value={rules}
-          onChange={(e) => setRules(e.target.value)}
-          rows={15}
-          placeholder="Document your trading rules here..."
-          className="textarea-large"
-        />
-        <button onClick={save} className="btn-primary">
-          💾 Save Rules
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ==================== CHECKLIST PAGE ====================
-const Checklist = ({ user, showToast }) => {
-  const [checklist, setChecklist] = useState(user?.tradingChecklist || '');
-
-  const save = async () => {
-    try {
-      await fetchWithAuth('/api/user/profile', {
-        method: 'PUT',
-        body: JSON.stringify({ tradingChecklist: checklist }),
-      });
-      showToast('✓ Checklist saved!', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  return (
-    <div className="page">
-      <h1>✅ Pre-Trade Checklist</h1>
-      <div className="card">
-        <textarea
-          value={checklist}
-          onChange={(e) => setChecklist(e.target.value)}
-          rows={15}
-          placeholder="☐ Item 1
-☐ Item 2..."
-          className="textarea-large"
-        />
-        <button onClick={save} className="btn-primary">
-          💾 Save Checklist
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ==================== PROFILE PAGE ====================
-const Profile = ({ user, showToast }) => {
-  const [name, setName] = useState(user?.name || '');
-  const [oldPwd, setOldPwd] = useState('');
-  const [newPwd, setNewPwd] = useState('');
-
-  const updateProfile = async () => {
-    try {
-      await fetchWithAuth('/api/user/profile', {
-        method: 'PUT',
-        body: JSON.stringify({ name }),
-      });
-      showToast('✓ Profile updated!', 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    }
-  };
-
-  const changePassword = async () => {
-    try {
-      await fetchWithAuth('/api/user/change-password', {
+      const response = await fetch(`${API_URL}/api/user/change-password`, {
         method: 'POST',
-        body: JSON.stringify({ oldPassword: oldPwd, newPassword: newPwd }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({ newPassword }),
       });
-      showToast('✓ Password changed!', 'success');
-      setOldPwd('');
-      setNewPwd('');
+
+      if (response.ok) {
+        alert('Password changed successfully');
+        setNewPassword('');
+        setConfirmPassword('');
+      }
     } catch (err) {
-      showToast(err.message, 'error');
+      alert('Error changing password');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="page">
-      <h1>⚙️ Settings</h1>
-
-      <div className="card">
-        <h3>Account Information</h3>
-        <div className="form-group">
-          <label>Name</label>
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+    <div>
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">Settings</h1>
+          <p className="page-subtitle">Account & Preferences</p>
         </div>
-        <button onClick={updateProfile} className="btn-primary">
-          Update Name
-        </button>
       </div>
 
       <div className="card">
-        <h3>Change Password</h3>
-        <div className="form-group">
-          <label>Current Password</label>
-          <input
-            type="password"
-            placeholder="••••••••"
-            value={oldPwd}
-            onChange={(e) => setOldPwd(e.target.value)}
-          />
+        <div className="card-title">
+          <span className="card-title-icon">👤</span>
+          Profile Information
         </div>
-        <div className="form-group">
-          <label>New Password</label>
-          <input
-            type="password"
-            placeholder="••••••••"
-            value={newPwd}
-            onChange={(e) => setNewPwd(e.target.value)}
-          />
+        <div style={{ padding: '20px 0', borderBottom: '1px solid #3d4573' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <p style={{ color: '#a0aec0', fontSize: '13px', marginBottom: '4px' }}>Name</p>
+            <p style={{ fontSize: '16px', fontWeight: '600' }}>{user?.name}</p>
+          </div>
+          <div>
+            <p style={{ color: '#a0aec0', fontSize: '13px', marginBottom: '4px' }}>Email</p>
+            <p style={{ fontSize: '16px', fontWeight: '600' }}>{user?.email}</p>
+          </div>
         </div>
-        <button onClick={changePassword} className="btn-primary">
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <span className="card-title-icon">🔒</span>
           Change Password
+        </div>
+        <form onSubmit={handleChangePassword}>
+          <div className="form-group">
+            <label className="form-label">New Password</label>
+            <input
+              type="password"
+              className="form-input"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Confirm Password</label>
+            <input
+              type="password"
+              className="form-input"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? 'Updating...' : 'Update Password'}
+          </button>
+        </form>
+      </div>
+
+      <div className="card">
+        <div className="card-title">
+          <span className="card-title-icon">🚪</span>
+          Session
+        </div>
+        <button className="btn btn-danger" onClick={onLogout}>
+          Logout
         </button>
       </div>
     </div>
   );
-};
+}
 
-// ==================== DASHBOARD APP ====================
-const DashboardApp = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [user, setUser] = useState(null);
+// ==================== MAIN APP ====================
+
+export default function App() {
+  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || '{}'));
+  const [currentPage, setCurrentPage] = useState('dashboard');
   const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
   useEffect(() => {
-    const loadData = async () => {
-      const token = getAuthToken();
-      if (!token) {
-        navigate('/login');
-        return;
-      }
+    if (token) {
+      fetchTrades();
+    } else {
+      setLoading(false);
+    }
+  }, [token]);
 
-      try {
-        const userData = await fetchWithAuth('/api/auth/me');
-        setUser(userData);
-        const tradesData = await fetchWithAuth('/api/trades');
-        setTrades(tradesData || []);
-      } catch (err) {
-        localStorage.removeItem('token');
-        navigate('/login');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, [navigate]);
-
-  const showToast = (message, type = 'success') => {
-    setToast({ message, type });
+  const fetchTrades = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/trades`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await response.json();
+      setTrades(data || []);
+    } catch (err) {
+      console.error('Error fetching trades:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading) {
+  const handleLogin = (newToken, newUser) => {
+    setToken(newToken);
+    setUser(newUser);
+    setCurrentPage('dashboard');
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setToken(null);
+    setUser(null);
+    setCurrentPage('dashboard');
+  };
+
+  if (!token) {
     return (
-      <div className="loading-screen">
-        <div className="loading-spinner"></div>
-        <p>Loading your trading dashboard...</p>
-      </div>
+      <>
+        <style>{styles}</style>
+        <LoginPage onLogin={handleLogin} />
+      </>
     );
   }
 
-  if (!user) return null;
-
-  const isAuthPage = location.pathname === '/login' || location.pathname === '/signup';
+  if (loading) {
+    return (
+      <>
+        <style>{styles}</style>
+        <div className="loading">
+          <div className="spinner"></div>
+          <p>Loading your trading data...</p>
+        </div>
+      </>
+    );
+  }
 
   return (
-    <div className="app-container">
-      {!isAuthPage && <Sidebar />}
-      <div className={isAuthPage ? 'full-width' : 'main-content'}>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/" element={<Dashboard trades={trades} user={user} />} />
-          <Route path="/trades" element={<TradeLog trades={trades} setTrades={setTrades} showToast={showToast} />} />
-          <Route path="/analytics" element={<Analytics trades={trades} />} />
-          <Route path="/calendar" element={<Calendar trades={trades} />} />
-          <Route path="/backtest" element={<Backtest trades={trades} />} />
-          <Route path="/rules" element={<Rules user={user} showToast={showToast} />} />
-          <Route path="/checklist" element={<Checklist user={user} showToast={showToast} />} />
-          <Route path="/profile" element={<Profile user={user} showToast={showToast} />} />
-          <Route path="*" element={<Dashboard trades={trades} user={user} />} />
-        </Routes>
+    <>
+      <style>{styles}</style>
+      <div className="app-container">
+        <div className="sidebar">
+          <div className="logo">
+            <div className="logo-icon">📈</div>
+            <div className="logo-text">TTM Journal</div>
+          </div>
+
+          {[
+            { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+            { id: 'trade-log', label: 'Trade Log', icon: '📝' },
+            { id: 'analytics', label: 'Analytics', icon: '📈' },
+            { id: 'settings', label: 'Settings', icon: '⚙️' },
+          ].map(item => (
+            <div
+              key={item.id}
+              className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
+              onClick={() => setCurrentPage(item.id)}
+            >
+              <span className="nav-icon">{item.icon}</span>
+              {item.label}
+            </div>
+          ))}
+        </div>
+
+        <div className="main-content">
+          <div className="page-header" style={{ position: 'absolute', top: '20px', right: '32px', marginBottom: 0 }}>
+            <div className="user-info">
+              <div className="user-avatar">{user?.name?.[0]?.toUpperCase()}</div>
+              <span className="user-name">{user?.name}</span>
+            </div>
+          </div>
+
+          {currentPage === 'dashboard' && <Dashboard trades={trades} user={user} />}
+          {currentPage === 'trade-log' && <TradeLog onAddTrade={fetchTrades} trades={trades} />}
+          {currentPage === 'analytics' && <Analytics trades={trades} />}
+          {currentPage === 'settings' && <Settings user={user} onLogout={handleLogout} />}
+        </div>
       </div>
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-    </div>
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </>
   );
-};
-
-// ==================== MAIN APP ====================
-const App = () => {
-  return <DashboardApp />;
-};
-
-// ==================== GLOBAL STYLES - PROFESSIONAL UI ====================
-const GlobalStyle = () => (
-  <style>{`
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html, body, #root {
-      width: 100%;
-      height: 100%;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-      background: #f8f9fa;
-      color: #1f2937;
-      line-height: 1.6;
-    }
-
-    /* ===== AUTH PAGES ===== */
-    .auth-page {
-      position: relative;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      overflow: hidden;
-    }
-
-    .auth-bg {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="rgba(255,255,255,0.1)" fill-opacity="1" d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,144C960,149,1056,139,1152,128C1248,117,1344,107,1392,101.3L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>');
-      background-size: cover;
-      background-position: bottom;
-    }
-
-    .auth-container {
-      position: relative;
-      z-index: 10;
-      max-width: 1200px;
-      width: 100%;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4rem;
-      padding: 2rem;
-      align-items: center;
-    }
-
-    .auth-card {
-      background: white;
-      border-radius: 20px;
-      padding: 3rem;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      backdrop-filter: blur(10px);
-    }
-
-    .auth-header {
-      margin-bottom: 2rem;
-    }
-
-    .auth-logo {
-      display: flex;
-      align-items: center;
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-
-    .logo-icon {
-      font-size: 2.5rem;
-    }
-
-    .auth-logo h1 {
-      font-size: 1.8rem;
-      color: #667eea;
-      margin-bottom: 0.25rem;
-    }
-
-    .auth-logo p {
-      color: #9ca3af;
-      font-size: 0.9rem;
-    }
-
-    .error-alert {
-      background: #fee2e2;
-      border: 1px solid #fecaca;
-      color: #dc2626;
-      padding: 0.75rem;
-      border-radius: 8px;
-      margin-bottom: 1rem;
-      font-size: 0.9rem;
-    }
-
-    .auth-form {
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .form-group label {
-      font-weight: 600;
-      color: #374151;
-      font-size: 0.9rem;
-    }
-
-    .form-group input,
-    .form-group select {
-      padding: 0.75rem;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      transition: all 0.2s;
-      font-family: inherit;
-    }
-
-    .form-group input:focus,
-    .form-group select:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-
-    .btn-primary-large {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border: none;
-      padding: 0.875rem;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      font-size: 0.95rem;
-      transition: all 0.2s;
-      box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-    }
-
-    .btn-primary-large:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-    }
-
-    .auth-footer {
-      text-align: center;
-      border-top: 1px solid #e5e7eb;
-      padding-top: 1rem;
-      color: #6b7280;
-      font-size: 0.9rem;
-    }
-
-    .auth-footer p {
-      margin-bottom: 0.5rem;
-    }
-
-    .auth-footer a {
-      color: #667eea;
-      text-decoration: none;
-      font-weight: 600;
-      transition: 0.2s;
-    }
-
-    .auth-footer a:hover {
-      color: #764ba2;
-    }
-
-    .auth-features {
-      display: flex;
-      flex-direction: column;
-      gap: 1.5rem;
-    }
-
-    .feature {
-      background: rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(10px);
-      padding: 1.5rem;
-      border-radius: 12px;
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .feature-icon {
-      font-size: 2rem;
-      margin-bottom: 0.5rem;
-    }
-
-    .feature h3 {
-      font-size: 1.1rem;
-      margin-bottom: 0.5rem;
-      font-weight: 600;
-    }
-
-    .feature p {
-      font-size: 0.9rem;
-      opacity: 0.9;
-    }
-
-    @media (max-width: 768px) {
-      .auth-container {
-        grid-template-columns: 1fr;
-      }
-      .auth-features {
-        display: none;
-      }
-    }
-
-    /* ===== SIDEBAR ===== */
-    .app-container {
-      display: flex;
-      min-height: 100vh;
-      background: #f8f9fa;
-    }
-
-    .sidebar {
-      width: 280px;
-      background: white;
-      border-right: 1px solid #e5e7eb;
-      box-shadow: 2px 0 8px rgba(0,0,0,0.05);
-      position: fixed;
-      height: 100vh;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      z-index: 100;
-    }
-
-    .sidebar-header {
-      padding: 1.5rem;
-      border-bottom: 1px solid #e5e7eb;
-    }
-
-    .logo-brand {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-
-    .logo-circle {
-      width: 40px;
-      height: 40px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.5rem;
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-    }
-
-    .logo-text {
-      flex: 1;
-    }
-
-    .logo-main {
-      font-weight: 700;
-      color: #1f2937;
-      font-size: 1rem;
-    }
-
-    .logo-sub {
-      font-size: 0.75rem;
-      color: #9ca3af;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .sidebar-nav {
-      flex: 1;
-      padding: 1rem 0;
-      overflow-y: auto;
-    }
-
-    .nav-section {
-      padding: 0 0.75rem 1.5rem 0.75rem;
-    }
-
-    .nav-label {
-      font-size: 0.7rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      color: #9ca3af;
-      padding: 0 1rem 0.5rem;
-      letter-spacing: 0.5px;
-    }
-
-    .sidebar-item {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.75rem 1rem;
-      margin: 0.25rem 0;
-      border-radius: 8px;
-      color: #6b7280;
-      text-decoration: none;
-      transition: all 0.2s;
-      font-size: 0.95rem;
-    }
-
-    .sidebar-item:hover {
-      background: #f3f4f6;
-      color: #667eea;
-    }
-
-    .sidebar-item.active {
-      background: linear-gradient(135deg, rgba(102,126,234,0.1) 0%, rgba(118,75,162,0.1) 100%);
-      color: #667eea;
-      font-weight: 600;
-      border-left: 3px solid #667eea;
-      padding-left: calc(1rem - 3px);
-    }
-
-    .item-icon {
-      font-size: 1.1rem;
-    }
-
-    .sidebar-footer {
-      padding: 1rem;
-      border-top: 1px solid #e5e7eb;
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .premium-badge {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 0.75rem;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      font-size: 0.9rem;
-    }
-
-    .badge-icon {
-      font-size: 1.2rem;
-    }
-
-    .badge-title {
-      font-weight: 600;
-      font-size: 0.85rem;
-    }
-
-    .badge-subtitle {
-      font-size: 0.7rem;
-      opacity: 0.9;
-    }
-
-    .btn-logout {
-      background: #fee2e2;
-      color: #dc2626;
-      border: 1px solid #fecaca;
-      padding: 0.75rem;
-      border-radius: 8px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      font-size: 0.9rem;
-    }
-
-    .btn-logout:hover {
-      background: #fecaca;
-    }
-
-    /* ===== MAIN CONTENT ===== */
-    .main-content {
-      margin-left: 280px;
-      flex: 1;
-      overflow-y: auto;
-    }
-
-    .full-width {
-      flex: 1;
-    }
-
-    .page {
-      padding: 2rem;
-      max-width: 1400px;
-      margin: 0 auto;
-    }
-
-    .page h1 {
-      font-size: 2rem;
-      color: #1f2937;
-      margin-bottom: 0.5rem;
-    }
-
-    .page h3 {
-      font-size: 1.1rem;
-      color: #1f2937;
-      margin-bottom: 1rem;
-      font-weight: 600;
-    }
-
-    .page-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 2rem;
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-
-    .page-title h1 {
-      margin-bottom: 0.25rem;
-    }
-
-    .page-title p {
-      color: #9ca3af;
-      font-size: 0.9rem;
-    }
-
-    /* ===== STATS GRID ===== */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 1.5rem;
-      margin-bottom: 2rem;
-    }
-
-    .stat-card {
-      background: white;
-      padding: 1.5rem;
-      border-radius: 12px;
-      border: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-      transition: all 0.2s;
-    }
-
-    .stat-card:hover {
-      border-color: #d1d5db;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-      transform: translateY(-2px);
-    }
-
-    .stat-header {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 1rem;
-    }
-
-    .stat-icon {
-      font-size: 1.5rem;
-    }
-
-    .stat-label {
-      font-size: 0.85rem;
-      color: #9ca3af;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 600;
-    }
-
-    .stat-value {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: #1f2937;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .stat-change {
-      font-size: 0.85rem;
-      color: #10b981;
-      margin-top: 0.5rem;
-    }
-
-    .stat-primary .stat-value { color: #667eea; }
-    .stat-success .stat-value { color: #10b981; }
-    .stat-danger .stat-value { color: #ef4444; }
-    .stat-warning .stat-value { color: #f59e0b; }
-
-    /* ===== CARDS ===== */
-    .card {
-      background: white;
-      border-radius: 12px;
-      padding: 1.5rem;
-      border: 1px solid #e5e7eb;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-      margin-bottom: 1.5rem;
-    }
-
-    .card h3 {
-      margin-bottom: 1rem;
-    }
-
-    .form-card {
-      background: linear-gradient(135deg, #f9fafb 0%, #ffffff 100%);
-    }
-
-    /* ===== FORMS ===== */
-    .form-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1rem;
-    }
-
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .form-group label {
-      font-weight: 600;
-      color: #374151;
-      font-size: 0.85rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .form-group input,
-    .form-group select,
-    .form-group textarea {
-      padding: 0.75rem;
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      font-family: inherit;
-      transition: all 0.2s;
-    }
-
-    .form-group input:focus,
-    .form-group select:focus,
-    .form-group textarea:focus {
-      outline: none;
-      border-color: #667eea;
-      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-    }
-
-    .form-actions {
-      display: flex;
-      gap: 0.75rem;
-      margin-top: 1.5rem;
-    }
-
-    .rating-selector {
-      display: flex;
-      gap: 0.5rem;
-    }
-
-    .rating-btn {
-      background: #f3f4f6;
-      border: 1px solid #d1d5db;
-      padding: 0.5rem 0.75rem;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s;
-      font-size: 1.1rem;
-    }
-
-    .rating-btn:hover {
-      border-color: #667eea;
-    }
-
-    .rating-btn.active {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-color: #667eea;
-      color: white;
-    }
-
-    .textarea-large {
-      width: 100%;
-      min-height: 300px !important;
-      resize: vertical;
-    }
-
-    /* ===== BUTTONS ===== */
-    .btn-primary,
-    .btn-secondary {
-      padding: 0.75rem 1.5rem;
-      border-radius: 8px;
-      border: none;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-      font-size: 0.9rem;
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
-    }
-
-    .btn-secondary {
-      background: #f3f4f6;
-      color: #1f2937;
-      border: 1px solid #d1d5db;
-    }
-
-    .btn-secondary:hover {
-      background: #e5e7eb;
-    }
-
-    .action-btn {
-      padding: 0.5rem 0.75rem;
-      background: #f3f4f6;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition: all 0.2s;
-      margin-right: 0.25rem;
-    }
-
-    .action-btn:hover {
-      background: #e5e7eb;
-    }
-
-    /* ===== FILTERS ===== */
-    .filters {
-      display: flex;
-      gap: 0.75rem;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-    }
-
-    .filters select {
-      padding: 0.75rem;
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
-      background: white;
-      cursor: pointer;
-      transition: all 0.2s;
-      font-size: 0.9rem;
-    }
-
-    .filters select:hover {
-      border-color: #667eea;
-    }
-
-    /* ===== TABLES ===== */
-    .trade-table,
-    .mini-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.9rem;
-    }
-
-    .trade-table thead,
-    .mini-table thead {
-      background: #f9fafb;
-      border-bottom: 2px solid #e5e7eb;
-    }
-
-    .trade-table th,
-    .mini-table th {
-      padding: 1rem;
-      text-align: left;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      font-size: 0.8rem;
-      letter-spacing: 0.5px;
-    }
-
-    .trade-table td,
-    .mini-table td {
-      padding: 1rem;
-      border-bottom: 1px solid #e5e7eb;
-      color: #1f2937;
-    }
-
-    .trade-table tbody tr:hover,
-    .mini-table tbody tr:hover {
-      background: #f9fafb;
-    }
-
-    /* ===== BADGES ===== */
-    .badge {
-      display: inline-block;
-      padding: 0.25rem 0.75rem;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .badge-win {
-      background: #d1fae5;
-      color: #065f46;
-    }
-
-    .badge-loss {
-      background: #fee2e2;
-      color: #7f1d1d;
-    }
-
-    .badge-breakeven {
-      background: #fef3c7;
-      color: #78350f;
-    }
-
-    /* ===== HEATMAP ===== */
-    .heatmap-card {
-      background: white;
-      padding: 1.5rem;
-      border-radius: 12px;
-      border: 1px solid #e5e7eb;
-    }
-
-    .heatmap-grid {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: 6px;
-      margin-bottom: 1rem;
-    }
-
-    .heatmap-cell {
-      aspect-ratio: 1;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s;
-      border: 1px solid rgba(0,0,0,0.1);
-    }
-
-    .heatmap-cell:hover {
-      transform: scale(1.15);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-
-    /* ===== DASHBOARD GRID ===== */
-    .dashboard-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-      gap: 1.5rem;
-    }
-
-    /* ===== TOAST ===== */
-    .toast {
-      position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      padding: 1rem 1.5rem;
-      border-radius: 8px;
-      font-weight: 600;
-      z-index: 2000;
-      animation: slideIn 0.3s ease-out;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-
-    .toast-success {
-      background: #d1fae5;
-      color: #065f46;
-      border-left: 4px solid #10b981;
-    }
-
-    .toast-error {
-      background: #fee2e2;
-      color: #7f1d1d;
-      border-left: 4px solid #ef4444;
-    }
-
-    @keyframes slideIn {
-      from {
-        transform: translateX(400px);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-
-    /* ===== LOADING ===== */
-    .loading-screen {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-
-    .loading-spinner {
-      width: 50px;
-      height: 50px;
-      border: 4px solid rgba(255,255,255,0.3);
-      border-top: 4px solid white;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 1rem;
-    }
-
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-
-    .empty {
-      color: #9ca3af;
-      text-align: center;
-      padding: 2rem;
-      font-style: italic;
-    }
-
-    /* ===== RESPONSIVE ===== */
-    @media (max-width: 768px) {
-      .sidebar {
-        width: 70px;
-        padding: 1rem 0.5rem;
-      }
-
-      .logo-brand, .nav-label, .sidebar-footer {
-        display: none;
-      }
-
-      .sidebar-item {
-        justify-content: center;
-        padding: 0.75rem;
-      }
-
-      .item-label {
-        display: none;
-      }
-
-      .main-content {
-        margin-left: 70px;
-      }
-
-      .page {
-        padding: 1rem;
-      }
-
-      .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-      }
-
-      .dashboard-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .form-row {
-        grid-template-columns: 1fr;
-      }
-
-      .page-header {
-        flex-direction: column;
-      }
-    }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: #f3f4f6;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: #d1d5db;
-      border-radius: 4px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: #9ca3af;
-    }
-  `}</style>
-);
-
-// ==================== FINAL EXPORT ====================
-const AppWithStyles = () => (
-  <>
-    <GlobalStyle />
-    <App />
-  </>
-);
-
-export default AppWithStyles;
+}
